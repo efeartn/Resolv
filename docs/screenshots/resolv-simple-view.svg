@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 760" width="1180" height="760" fill="none" font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+  <!-- Window Frame -->
+  <rect width="1180" height="760" rx="14" fill="#09090B" stroke="#27272A" stroke-width="2"/>
+
+  <!-- Native Window Titlebar -->
+  <rect x="1" y="1" width="1178" height="36" rx="13" fill="#0D0D10"/>
+  <line x1="1" y1="37" x2="1179" y2="37" stroke="#1F1F23" stroke-width="1"/>
+  <circle cx="22" cy="19" r="5.5" fill="#3F3F46"/>
+  <circle cx="40" cy="19" r="5.5" fill="#3F3F46"/>
+  <circle cx="58" cy="19" r="5.5" fill="#3F3F46"/>
+  <text x="590" y="23" text-anchor="middle" fill="#71717A" font-size="11" font-weight="500">Resolv</text>
+
+  <!-- App Header Bar -->
+  <rect x="1" y="38" width="1178" height="54" fill="#09090B"/>
+  <line x1="1" y1="92" x2="1179" y2="92" stroke="#27272A" stroke-width="1"/>
+
+  <!-- Mini App Icon in Header -->
+  <rect x="28" y="50" width="30" height="30" rx="7" fill="#09090B" stroke="#27272A" stroke-width="1.5"/>
+  <polyline points="33,66 39,66 42,61 44,70 47,57 50,68 53,66 56,66" stroke="#F4F4F5" stroke-width="2" stroke-linecap="square"/>
+  <circle cx="47" cy="57" r="2" fill="#10B981"/>
+
+  <text x="68" y="69" fill="#F4F4F5" font-size="15" font-weight="600">Resolv</text>
+  <rect x="124" y="55" width="46" height="20" rx="4" fill="#18181B" stroke="#27272A"/>
+  <text x="147" y="69" text-anchor="middle" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="10">v1.0.1</text>
+  <rect x="176" y="55" width="46" height="20" rx="4" fill="#064E3B" fill-opacity="0.45" stroke="#065F46"/>
+  <text x="199" y="69" text-anchor="middle" fill="#6EE7B7" font-family="JetBrains Mono, monospace" font-size="10">Admin</text>
+
+  <!-- Mode Switcher & Header Buttons -->
+  <rect x="668" y="50" width="248" height="30" rx="7" fill="#18181B" stroke="#27272A"/>
+  <rect x="671" y="53" width="106" height="24" rx="5" fill="#27272A"/>
+  <text x="724" y="69" text-anchor="middle" fill="#F4F4F5" font-size="11" font-weight="600">⚡ Simple View</text>
+  <text x="845" y="69" text-anchor="middle" fill="#A1A1AA" font-size="11" font-weight="500">Pro / Nerd Telemetry</text>
+
+  <rect x="926" y="50" width="104" height="30" rx="7" fill="#18181B" stroke="#27272A"/>
+  <text x="978" y="69" text-anchor="middle" fill="#E4E4E7" font-size="11" font-weight="500">+ Custom DNS</text>
+
+  <rect x="1038" y="50" width="76" height="30" rx="7" fill="#18181B" stroke="#27272A"/>
+  <text x="1076" y="69" text-anchor="middle" fill="#E4E4E7" font-size="11" font-weight="500">↓ Export</text>
+
+  <rect x="1122" y="50" width="30" height="30" rx="7" fill="#18181B" stroke="#27272A"/>
+  <text x="1137" y="69" text-anchor="middle" fill="#A1A1AA" font-size="12" font-weight="600">i</text>
+
+  <!-- HERO NETWORK CARD -->
+  <rect x="28" y="108" width="1124" height="96" rx="12" fill="#121215" stroke="#27272A"/>
+
+  <!-- Card 1: OS -->
+  <rect x="44" y="122" width="272" height="68" rx="8" fill="#18181B" fill-opacity="0.7" stroke="#27272A"/>
+  <text x="58" y="140" fill="#A1A1AA" font-size="10" font-weight="600" letter-spacing="0.6">OPERATING SYSTEM</text>
+  <text x="302" y="140" text-anchor="end" fill="#71717A" font-family="JetBrains Mono, monospace" font-size="10">powershell</text>
+  <text x="58" y="160" fill="#F4F4F5" font-size="13" font-weight="600">Windows 11 Pro</text>
+  <text x="58" y="177" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="11">workstation · amd64</text>
+
+  <!-- Card 2: Active Interface -->
+  <rect x="328" y="122" width="272" height="68" rx="8" fill="#18181B" fill-opacity="0.7" stroke="#27272A"/>
+  <text x="342" y="140" fill="#A1A1AA" font-size="10" font-weight="600" letter-spacing="0.6">ACTIVE INTERFACE</text>
+  <text x="342" y="160" fill="#F4F4F5" font-size="13" font-weight="600">Wi-Fi (Intel Wi-Fi 6E AX211) ▾</text>
+  <text x="342" y="177" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="11">192.168.1.42 · GW 192.168.1.1</text>
+
+  <!-- Card 3: Current System DNS -->
+  <rect x="612" y="122" width="272" height="68" rx="8" fill="#18181B" fill-opacity="0.7" stroke="#27272A"/>
+  <text x="626" y="140" fill="#A1A1AA" font-size="10" font-weight="600" letter-spacing="0.6">CURRENT SYSTEM DNS</text>
+  <rect x="820" y="129" width="52" height="15" rx="3" fill="#27272A"/>
+  <text x="846" y="140" text-anchor="middle" fill="#D4D4D8" font-family="JetBrains Mono, monospace" font-size="9">DHCP</text>
+  <text x="626" y="160" fill="#34D399" font-family="JetBrains Mono, monospace" font-size="13" font-weight="600">192.168.1.1</text>
+  <text x="626" y="177" fill="#A1A1AA" font-size="11">Reset to DHCP · Flush DNS Cache</text>
+
+  <!-- Run Speed Test CTA -->
+  <rect x="976" y="124" width="160" height="40" rx="8" fill="#10B981"/>
+  <text x="1056" y="149" text-anchor="middle" fill="#09090B" font-size="13" font-weight="700">▶ Run Speed Test</text>
+  <text x="1136" y="182" text-anchor="end" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="10">Staggered Pool · P95 · Hijack Probe</text>
+
+  <!-- WINNER RECOMMENDATION BANNER -->
+  <rect x="28" y="216" width="1124" height="74" rx="12" fill="#121215" stroke="#065F46" stroke-width="1.5"/>
+  <rect x="44" y="233" width="40" height="40" rx="10" fill="#10B981" fill-opacity="0.15" stroke="#10B981" stroke-opacity="0.4"/>
+  <text x="64" y="258" text-anchor="middle" fill="#6EE7B7" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700">#1</text>
+
+  <rect x="98" y="230" width="112" height="18" rx="4" fill="#10B981" fill-opacity="0.15" stroke="#10B981" stroke-opacity="0.3"/>
+  <text x="154" y="242" text-anchor="middle" fill="#6EE7B7" font-family="JetBrains Mono, monospace" font-size="9" font-weight="600">RECOMMENDED DNS</text>
+  <rect x="216" y="230" width="76" height="18" rx="4" fill="#10B981" fill-opacity="0.22"/>
+  <text x="254" y="242" text-anchor="middle" fill="#A7F3D0" font-family="JetBrains Mono, monospace" font-size="10" font-weight="600">11.4 ms avg</text>
+
+  <text x="98" y="263" fill="#F4F4F5" font-size="15" font-weight="600">Cloudflare is 73% faster than your current DNS</text>
+  <text x="98" y="279" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="11">Average 11.4 ms · P95 15.2 ms · jitter 1.6 ms · 0% packet loss · Privacy</text>
+
+  <rect x="938" y="236" width="78" height="34" rx="7" fill="#18181B" stroke="#3F3F46"/>
+  <text x="977" y="257" text-anchor="middle" fill="#E4E4E7" font-size="11" font-weight="500">Copy IPs</text>
+  <rect x="1024" y="236" width="112" height="34" rx="7" fill="#10B981"/>
+  <text x="1080" y="257" text-anchor="middle" fill="#09090B" font-size="11" font-weight="700">Apply Best DNS</text>
+
+  <!-- 4-CARD KPI TELEMETRY STRIP -->
+  <g transform="translate(28, 302)">
+    <rect x="0" y="0" width="272" height="58" rx="10" fill="#121215" stroke="#27272A"/>
+    <text x="14" y="18" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="9">FASTEST OVERALL</text>
+    <text x="14" y="36" fill="#6EE7B7" font-size="13" font-weight="600">Cloudflare · 11.4 ms</text>
+    <text x="14" y="50" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="10">P95 15.2 ms · Jitter 1.6 ms</text>
+
+    <rect x="284" y="0" width="272" height="58" rx="10" fill="#121215" stroke="#27272A"/>
+    <text x="298" y="18" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="9">FASTEST EDGE CACHE</text>
+    <text x="298" y="36" fill="#F4F4F5" font-size="13" font-weight="600">Cloudflare · 7.8 ms</text>
+    <text x="298" y="50" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="10">Min 6.4 ms edge hit</text>
+
+    <rect x="568" y="0" width="272" height="58" rx="10" fill="#121215" stroke="#27272A"/>
+    <text x="582" y="18" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="9">FASTEST RECURSIVE (UUID)</text>
+    <text x="582" y="36" fill="#67E8F9" font-size="13" font-weight="600">Cloudflare · 15.0 ms</text>
+    <text x="582" y="50" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="10">True recursive authority lookup</text>
+
+    <rect x="852" y="0" width="272" height="58" rx="10" fill="#121215" stroke="#27272A"/>
+    <text x="866" y="18" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="9">SECURITY &amp; FILTERING AUDIT</text>
+    <text x="866" y="36" fill="#F4F4F5" font-size="13" font-weight="600">9/9 DNSSEC · 2 AdBlock</text>
+    <text x="866" y="50" fill="#6EE7B7" font-family="JetBrains Mono, monospace" font-size="10">✓ Port 53 Unmodified</text>
+  </g>
+
+  <!-- FILTER, SEARCH & SORT BAR -->
+  <g transform="translate(28, 372)">
+    <rect x="0" y="0" width="90" height="26" rx="6" fill="#27272A" stroke="#3F3F46"/>
+    <text x="45" y="17" text-anchor="middle" fill="#F4F4F5" font-size="11" font-weight="500">All Resolvers</text>
+    <rect x="96" y="0" width="60" height="26" rx="6" fill="#18181B" stroke="#27272A"/>
+    <text x="126" y="17" text-anchor="middle" fill="#A1A1AA" font-size="11">Privacy</text>
+    <rect x="162" y="0" width="80" height="26" rx="6" fill="#18181B" stroke="#27272A"/>
+    <text x="202" y="17" text-anchor="middle" fill="#A1A1AA" font-size="11">Ad-blocking</text>
+    <rect x="248" y="0" width="66" height="26" rx="6" fill="#18181B" stroke="#27272A"/>
+    <text x="281" y="17" text-anchor="middle" fill="#A1A1AA" font-size="11">Standard</text>
+
+    <rect x="640" y="0" width="168" height="26" rx="6" fill="#18181B" stroke="#27272A"/>
+    <text x="650" y="17" fill="#71717A" font-size="11">Filter name or IP… (/)</text>
+    <rect x="816" y="0" width="132" height="26" rx="6" fill="#18181B" stroke="#27272A"/>
+    <text x="826" y="17" fill="#E4E4E7" font-size="11">Sort: Overall Rank ▾</text>
+
+    <circle cx="968" cy="13" r="4" fill="#34D399"/>
+    <text x="976" y="17" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="10">&lt;20ms</text>
+    <circle cx="1024" cy="13" r="4" fill="#FBBF24"/>
+    <text x="1032" y="17" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="10">20–60ms</text>
+    <circle cx="1088" cy="13" r="4" fill="#FB7185"/>
+    <text x="1096" y="17" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="10">&gt;60ms</text>
+  </g>
+
+  <!-- RESOLVER RANKING ROWS (With Inline SVG Range Bars & Sparklines) -->
+  <!-- Row 1: Cloudflare -->
+  <g transform="translate(28, 408)">
+    <rect width="1124" height="56" rx="10" fill="#121215" stroke="#27272A"/>
+    <rect x="14" y="14" width="28" height="28" rx="6" fill="#18181B" stroke="#27272A"/>
+    <text x="28" y="32" text-anchor="middle" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="11">#1</text>
+    <text x="54" y="25" fill="#F4F4F5" font-size="13" font-weight="600">Cloudflare</text>
+    <rect x="132" y="13" width="50" height="16" rx="4" fill="#083344" stroke="#155E75"/>
+    <text x="157" y="24" text-anchor="middle" fill="#67E8F9" font-family="JetBrains Mono, monospace" font-size="9">Privacy</text>
+    <text x="54" y="43" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="11">1.1.1.1, 1.0.0.1</text>
+
+    <!-- Range Bar SVG -->
+    <line x1="430" y1="28" x2="800" y2="28" stroke="#1F1F23" stroke-width="2"/>
+    <line x1="464" y1="28" x2="542" y2="28" stroke="#3F3F46" stroke-width="2"/>
+    <rect x="464" y="25" width="60" height="6" rx="2" fill="#10B981" fill-opacity="0.35"/>
+    <line x1="524" y1="22" x2="524" y2="34" stroke="#10B981" stroke-width="1.5"/>
+    <circle cx="492" cy="28" r="4.5" fill="#09090B" stroke="#10B981" stroke-width="2.2"/>
+    <!-- Sparkline SVG -->
+    <polyline points="824,33 834,23 844,31 854,24 864,29 874,21 884,32 894,25 904,28" stroke="#10B981" stroke-width="1.6" fill="none"/>
+
+    <rect x="942" y="15" width="72" height="26" rx="6" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.4"/>
+    <text x="978" y="32" text-anchor="middle" fill="#6EE7B7" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600">11.4 ms</text>
+    <rect x="1022" y="15" width="58" height="26" rx="6" fill="#18181B" stroke="#3F3F46"/>
+    <text x="1051" y="32" text-anchor="middle" fill="#E4E4E7" font-size="11" font-weight="500">Apply</text>
+    <text x="1098" y="32" text-anchor="middle" fill="#A1A1AA" font-size="11">▼</text>
+  </g>
+
+  <!-- Row 2: Quad9 -->
+  <g transform="translate(28, 472)">
+    <rect width="1124" height="56" rx="10" fill="#121215" stroke="#27272A"/>
+    <rect x="14" y="14" width="28" height="28" rx="6" fill="#18181B" stroke="#27272A"/>
+    <text x="28" y="32" text-anchor="middle" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="11">#2</text>
+    <text x="54" y="25" fill="#F4F4F5" font-size="13" font-weight="600">Quad9</text>
+    <rect x="104" y="13" width="50" height="16" rx="4" fill="#083344" stroke="#155E75"/>
+    <text x="129" y="24" text-anchor="middle" fill="#67E8F9" font-family="JetBrains Mono, monospace" font-size="9">Privacy</text>
+    <text x="54" y="43" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="11">9.9.9.9, 149.112.112.112</text>
+
+    <line x1="430" y1="28" x2="800" y2="28" stroke="#1F1F23" stroke-width="2"/>
+    <line x1="482" y1="28" x2="584" y2="28" stroke="#3F3F46" stroke-width="2"/>
+    <rect x="482" y="25" width="78" height="6" rx="2" fill="#10B981" fill-opacity="0.35"/>
+    <line x1="560" y1="22" x2="560" y2="34" stroke="#10B981" stroke-width="1.5"/>
+    <circle cx="520" cy="28" r="4.5" fill="#09090B" stroke="#10B981" stroke-width="2.2"/>
+    <polyline points="824,34 834,25 844,32 854,23 864,30 874,24 884,33 894,26 904,29" stroke="#10B981" stroke-width="1.6" fill="none"/>
+
+    <rect x="942" y="15" width="72" height="26" rx="6" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.4"/>
+    <text x="978" y="32" text-anchor="middle" fill="#6EE7B7" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600">16.8 ms</text>
+    <rect x="1022" y="15" width="58" height="26" rx="6" fill="#18181B" stroke="#3F3F46"/>
+    <text x="1051" y="32" text-anchor="middle" fill="#E4E4E7" font-size="11" font-weight="500">Apply</text>
+    <text x="1098" y="32" text-anchor="middle" fill="#A1A1AA" font-size="11">▼</text>
+  </g>
+
+  <!-- Row 3: Google Public DNS -->
+  <g transform="translate(28, 536)">
+    <rect width="1124" height="56" rx="10" fill="#121215" stroke="#27272A"/>
+    <rect x="14" y="14" width="28" height="28" rx="6" fill="#18181B" stroke="#27272A"/>
+    <text x="28" y="32" text-anchor="middle" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="11">#3</text>
+    <text x="54" y="25" fill="#F4F4F5" font-size="13" font-weight="600">Google Public DNS</text>
+    <rect x="180" y="13" width="58" height="16" rx="4" fill="#27272A" stroke="#3F3F46"/>
+    <text x="209" y="24" text-anchor="middle" fill="#D4D4D8" font-family="JetBrains Mono, monospace" font-size="9">Standard</text>
+    <text x="54" y="43" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="11">8.8.8.8, 8.8.4.4</text>
+
+    <line x1="430" y1="28" x2="800" y2="28" stroke="#1F1F23" stroke-width="2"/>
+    <line x1="490" y1="28" x2="602" y2="28" stroke="#3F3F46" stroke-width="2"/>
+    <rect x="490" y="25" width="84" height="6" rx="2" fill="#10B981" fill-opacity="0.35"/>
+    <line x1="574" y1="22" x2="574" y2="34" stroke="#10B981" stroke-width="1.5"/>
+    <circle cx="534" cy="28" r="4.5" fill="#09090B" stroke="#10B981" stroke-width="2.2"/>
+    <polyline points="824,33 834,26 844,34 854,22 864,31 874,25 884,32 894,27 904,30" stroke="#10B981" stroke-width="1.6" fill="none"/>
+
+    <rect x="942" y="15" width="72" height="26" rx="6" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.4"/>
+    <text x="978" y="32" text-anchor="middle" fill="#6EE7B7" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600">18.9 ms</text>
+    <rect x="1022" y="15" width="58" height="26" rx="6" fill="#18181B" stroke="#3F3F46"/>
+    <text x="1051" y="32" text-anchor="middle" fill="#E4E4E7" font-size="11" font-weight="500">Apply</text>
+    <text x="1098" y="32" text-anchor="middle" fill="#A1A1AA" font-size="11">▼</text>
+  </g>
+
+  <!-- Row 4: AdGuard DNS -->
+  <g transform="translate(28, 600)">
+    <rect width="1124" height="56" rx="10" fill="#121215" stroke="#27272A"/>
+    <rect x="14" y="14" width="28" height="28" rx="6" fill="#18181B" stroke="#27272A"/>
+    <text x="28" y="32" text-anchor="middle" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="11">#4</text>
+    <text x="54" y="25" fill="#F4F4F5" font-size="13" font-weight="600">AdGuard DNS</text>
+    <rect x="148" y="13" width="74" height="16" rx="4" fill="#3B0764" fill-opacity="0.6" stroke="#6B21A8"/>
+    <text x="185" y="24" text-anchor="middle" fill="#D8B4FE" font-family="JetBrains Mono, monospace" font-size="9">Ad-blocking</text>
+    <rect x="228" y="13" width="70" height="16" rx="4" fill="#3B0764" fill-opacity="0.6" stroke="#6B21A8"/>
+    <text x="263" y="24" text-anchor="middle" fill="#D8B4FE" font-family="JetBrains Mono, monospace" font-size="9">🛡 3/3 Ads</text>
+    <text x="54" y="43" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="11">94.140.14.14, 94.140.15.15</text>
+
+    <line x1="430" y1="28" x2="800" y2="28" stroke="#1F1F23" stroke-width="2"/>
+    <line x1="528" y1="28" x2="668" y2="28" stroke="#3F3F46" stroke-width="2"/>
+    <rect x="528" y="25" width="112" height="6" rx="2" fill="#F59E0B" fill-opacity="0.35"/>
+    <line x1="640" y1="22" x2="640" y2="34" stroke="#F59E0B" stroke-width="1.5"/>
+    <circle cx="586" cy="28" r="4.5" fill="#09090B" stroke="#F59E0B" stroke-width="2.2"/>
+    <polyline points="824,34 834,24 844,31 854,22 864,33 874,25 884,32 894,24 904,28" stroke="#F59E0B" stroke-width="1.6" fill="none"/>
+
+    <rect x="942" y="15" width="72" height="26" rx="6" fill="#F59E0B" fill-opacity="0.14" stroke="#F59E0B" stroke-opacity="0.4"/>
+    <text x="978" y="32" text-anchor="middle" fill="#FCD34D" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600">29.5 ms</text>
+    <rect x="1022" y="15" width="58" height="26" rx="6" fill="#18181B" stroke="#3F3F46"/>
+    <text x="1051" y="32" text-anchor="middle" fill="#E4E4E7" font-size="11" font-weight="500">Apply</text>
+    <text x="1098" y="32" text-anchor="middle" fill="#A1A1AA" font-size="11">▼</text>
+  </g>
+
+  <!-- Row 5: Current System DNS -->
+  <g transform="translate(28, 664)">
+    <rect width="1124" height="56" rx="10" fill="#121215" stroke="#27272A"/>
+    <rect x="14" y="14" width="28" height="28" rx="6" fill="#18181B" stroke="#27272A"/>
+    <text x="28" y="32" text-anchor="middle" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="11">#5</text>
+    <text x="54" y="25" fill="#F4F4F5" font-size="13" font-weight="600">Current System DNS</text>
+    <rect x="190" y="13" width="52" height="16" rx="4" fill="#064E3B" fill-opacity="0.6" stroke="#065F46"/>
+    <text x="216" y="24" text-anchor="middle" fill="#6EE7B7" font-family="JetBrains Mono, monospace" font-size="9">System</text>
+    <text x="54" y="43" fill="#A1A1AA" font-family="JetBrains Mono, monospace" font-size="11">192.168.1.1</text>
+
+    <line x1="430" y1="28" x2="800" y2="28" stroke="#1F1F23" stroke-width="2"/>
+    <line x1="565" y1="28" x2="735" y2="28" stroke="#3F3F46" stroke-width="2"/>
+    <rect x="565" y="25" width="136" height="6" rx="2" fill="#F59E0B" fill-opacity="0.35"/>
+    <line x1="701" y1="22" x2="701" y2="34" stroke="#F59E0B" stroke-width="1.5"/>
+    <circle cx="642" cy="28" r="4.5" fill="#09090B" stroke="#F59E0B" stroke-width="2.2"/>
+    <polyline points="824,35 834,26 844,34 854,23 864,33 874,24 884,34 894,25 904,31" stroke="#F59E0B" stroke-width="1.6" fill="none"/>
+
+    <rect x="942" y="15" width="72" height="26" rx="6" fill="#F59E0B" fill-opacity="0.14" stroke="#F59E0B" stroke-opacity="0.4"/>
+    <text x="978" y="32" text-anchor="middle" fill="#FCD34D" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600">41.6 ms</text>
+    <rect x="1022" y="15" width="58" height="26" rx="6" fill="#18181B" stroke="#3F3F46"/>
+    <text x="1051" y="32" text-anchor="middle" fill="#E4E4E7" font-size="11" font-weight="500">Apply</text>
+    <text x="1098" y="32" text-anchor="middle" fill="#A1A1AA" font-size="11">▼</text>
+  </g>
+
+  <!-- Footer -->
+  <text x="28" y="744" fill="#71717A" font-size="10">Resolv — Pure-Go DNS Benchmark (UDP · TCP · DoH · DoT), DNSSEC &amp; AdBlock Probe, ISP Hijack Detection.</text>
+  <text x="1152" y="744" text-anchor="end" fill="#71717A" font-family="JetBrains Mono, monospace" font-size="10">SPDX-License-Identifier: GPL-3.0-or-later</text>
+</svg>
