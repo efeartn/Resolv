@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 PulseDNS contributors
+// Copyright (C) 2026 Resolv contributors
 
 package main
 
@@ -25,7 +25,7 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:            "PulseDNS",
+		Title:            "Resolv",
 		Width:            1180,
 		Height:           780,
 		MinWidth:         900,
@@ -57,7 +57,7 @@ func main() {
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  false,
 			About: &mac.AboutInfo{
-				Title:   "PulseDNS " + AppVersion,
+				Title:   "Resolv " + AppVersion,
 				Message: "Cross-platform DNS Benchmarker & Switcher\nLicensed under the GNU GPLv3.",
 				Icon:    appIcon,
 			},
@@ -66,7 +66,7 @@ func main() {
 			Icon:                appIcon,
 			WindowIsTranslucent: false,
 			WebviewGpuPolicy:    linux.WebviewGpuPolicyOnDemand,
-			ProgramName:         "pulsedns",
+			ProgramName:         "resolv",
 		},
 	})
 	if err != nil {

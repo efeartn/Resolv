@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Resolv / PulseDNS contributors
+// Copyright (C) 2026 Resolv contributors
 
 package dns
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 PulseDNS contributors
+// Copyright (C) 2026 Resolv contributors
 
 // Package sysnet abstracts OS-specific network operations: detecting the
 // active interface and its DNS servers, applying/resetting DNS servers and

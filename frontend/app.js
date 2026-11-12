@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Resolv / PulseDNS contributors
+// Copyright (C) 2026 Resolv contributors
 
 (() => {
   'use strict';
@@ -1171,7 +1171,7 @@
         if (fmt === 'json') return JSON.stringify(r, null, 2);
         if (fmt === 'csv') return 'rank,name,category,avg_ms,p95_ms,cached_ms,uncached_ms,jitter_ms,loss_pct,blocks_ads\n' +
           r.results.map((s) => `${s.rank},${s.resolver.name},${s.resolver.category},${s.overall.avgMs},${s.overall.p95Ms},${s.cached.avgMs},${s.uncached.avgMs},${s.overall.jitterMs},${s.overall.lossPct},${s.filtering.blocksAds}`).join('\n');
-        return `# Resolv / PulseDNS Benchmark Report\n\n| # | Resolver | Category | Avg (ms) | P95 | Cached | Uncached | Jitter | Loss | AdBlock |\n|---:|---|---|---:|---:|---:|---:|---:|---:|---|\n` +
+        return `# Resolv Benchmark Report\n\n| # | Resolver | Category | Avg (ms) | P95 | Cached | Uncached | Jitter | Loss | AdBlock |\n|---:|---|---|---:|---:|---:|---:|---:|---:|---|\n` +
           r.results.map((s) => `| ${s.rank} | ${s.resolver.name} | ${s.resolver.category} | **${s.overall.avgMs}** | ${s.overall.p95Ms} | ${s.cached.avgMs} | ${s.uncached.avgMs} | ${s.overall.jitterMs} | ${s.overall.lossPct}% | ${s.filtering.blocksAds ? 'Yes' : 'No'} |`).join('\n');
       }
     };

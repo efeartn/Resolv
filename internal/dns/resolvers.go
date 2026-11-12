@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 PulseDNS contributors
+// Copyright (C) 2026 Resolv contributors
 
 package dns
 
@@ -35,7 +35,7 @@ const (
 	SourceCustom  Source = "custom"
 )
 
-// Resolver describes a DNS provider and every endpoint PulseDNS knows for it.
+// Resolver describes a DNS provider and every endpoint Resolv knows for it.
 type Resolver struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`

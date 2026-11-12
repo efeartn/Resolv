@@ -1,4 +1,4 @@
-# Resolv · PulseDNS
+# Resolv
 
 **Cross-Platform DNS Protocol Benchmark, Privacy Probe & One-Click Switcher**  
 Built with **Go**, **`github.com/miekg/dns`**, and **Wails v2** (WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux). Licensed under the **GNU GPLv3 (`GPL-3.0-or-later`)**.
@@ -104,5 +104,5 @@ wails build -platform linux/amd64 -tags webkit2_41 -clean -trimpath -ldflags "-s
 
 ## License
 
-Copyright (C) 2026 Resolv / PulseDNS Contributors.  
+Copyright (C) 2026 Resolv Contributors.  
 Distributed under the **GNU General Public License v3.0 or later (`GPL-3.0-or-later`)**. See [LICENSE](./LICENSE) for the full license text.

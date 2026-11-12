@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 PulseDNS contributors
+// Copyright (C) 2026 Resolv contributors
 
 package main
 
@@ -16,8 +16,8 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"pulsedns/internal/dns"
-	"pulsedns/internal/sysnet"
+	"resolv/internal/dns"
+	"resolv/internal/sysnet"
 )
 
 const (
@@ -60,7 +60,7 @@ type App struct {
 	cancelRun  context.CancelFunc
 }
 
-// NewApp creates a new PulseDNS application controller.
+// NewApp creates a new Resolv application controller.
 func NewApp() *App {
 	a := &App{}
 	a.loadCustomResolvers()
@@ -371,9 +371,9 @@ func (a *App) SaveReport(format string) (string, error) {
 		ext = "json"
 	}
 
-	filename := fmt.Sprintf("pulsedns-report-%s.%s", time.Now().Format("20060102-150405"), ext)
+	filename := fmt.Sprintf("resolv-report-%s.%s", time.Now().Format("20060102-150405"), ext)
 	target, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "Export PulseDNS Benchmark Report",
+		Title:           "Export Resolv Benchmark Report",
 		DefaultFilename: filename,
 		Filters: []runtime.FileFilter{
 			{DisplayName: filterName, Pattern: filterPattern},
@@ -493,7 +493,7 @@ func configFilePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "PulseDNS", "custom_resolvers.json"), nil
+	return filepath.Join(dir, "Resolv", "custom_resolvers.json"), nil
 }
 
 func (a *App) loadCustomResolvers() {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 PulseDNS contributors
+// Copyright (C) 2026 Resolv contributors
 
-// Package dns implements PulseDNS' pure-Go DNS benchmarking engine. It speaks
+// Package dns implements Resolv' pure-Go DNS benchmarking engine. It speaks
 // the DNS protocol directly (UDP, TCP, DoH, DoT) via github.com/miekg/dns and
 // never relies on ICMP.
 package dns

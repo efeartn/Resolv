@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 PulseDNS contributors
+// Copyright (C) 2026 Resolv contributors
 
 package dns
 
@@ -193,7 +193,7 @@ func (q *dohQuerier) exchange(ctx context.Context, m *mdns.Msg) (*mdns.Msg, time
 	}
 	req.Header.Set("Content-Type", "application/dns-message")
 	req.Header.Set("Accept", "application/dns-message")
-	req.Header.Set("User-Agent", "PulseDNS")
+	req.Header.Set("User-Agent", "Resolv")
 
 	start := time.Now()
 	resp, err := q.client.Do(req)

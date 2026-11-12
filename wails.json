@@ -1,7 +1,7 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "PulseDNS",
-  "outputfilename": "pulsedns",
+  "name": "Resolv",
+  "outputfilename": "resolv",
   "frontend:dir": "frontend",
   "frontend:install": "",
   "frontend:build": "",
@@ -9,14 +9,14 @@
   "frontend:dev:serverUrl": "",
   "wailsjsdir": "./frontend",
   "author": {
-    "name": "PulseDNS Contributors",
-    "email": "maintainers@pulsedns.org"
+    "name": "Resolv Contributors",
+    "email": "maintainers@resolv.org"
   },
   "info": {
-    "companyName": "PulseDNS Open Source Project",
-    "productName": "PulseDNS",
+    "companyName": "Resolv Open Source Project",
+    "productName": "Resolv",
     "productVersion": "1.0.0",
-    "copyright": "Copyright (C) 2026 PulseDNS Contributors — Licensed under GNU GPLv3",
+    "copyright": "Copyright (C) 2026 Resolv Contributors — Licensed under GNU GPLv3",
     "comments": "Cross-Platform DNS Protocol Benchmark & One-Click Switcher"
   },
   "nsisType": "multiple"

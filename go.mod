@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-module pulsedns
+module resolv
 
 go 1.26.0
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 PulseDNS contributors
+// Copyright (C) 2026 Resolv contributors
 
 //go:build darwin
 
@@ -193,7 +193,7 @@ func runPrivileged(ctx context.Context, script string) error {
 	}
 	as := fmt.Sprintf(`do shell script %s with prompt %s with administrator privileges`,
 		appleScriptString(script),
-		appleScriptString("PulseDNS needs administrator access to change your DNS settings."))
+		appleScriptString("Resolv needs administrator access to change your DNS settings."))
 	_, err := run(ctx, osascript, "-e", as)
 	if err != nil {
 		msg := err.Error()

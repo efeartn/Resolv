@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 PulseDNS contributors
+// Copyright (C) 2026 Resolv contributors
 
 //go:build windows
 
@@ -203,7 +203,7 @@ func flushCache(ctx context.Context) error {
 // not elevated, a UAC prompt is shown via Start-Process -Verb RunAs. Errors
 // from the elevated process are relayed through a temporary file.
 func runPrivileged(ctx context.Context, body string) error {
-	errFile, err := os.CreateTemp("", "pulsedns-*.err")
+	errFile, err := os.CreateTemp("", "resolv-*.err")
 	if err != nil {
 		return err
 	}

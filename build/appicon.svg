@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- Resolv / PulseDNS Application Icon — Pure Flat Geometric Vector (Zero Gradients / Zero Filters) -->
+<!-- Resolv Application Icon — Pure Flat Geometric Vector (Zero Gradients / Zero Filters) -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none">
   <!-- Solid Dark Squircle Base (#09090B) + Subtle 1px Structural Hairline (#27272A) -->
   <rect x="24" y="24" width="464" height="464" rx="108" fill="#09090B"/>

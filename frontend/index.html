@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- Copyright (C) 2026 Resolv / PulseDNS contributors -->
+<!-- Copyright (C) 2026 Resolv contributors -->
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Resolv · PulseDNS — Cross-Platform DNS Benchmark &amp; Privacy Probe</title>
+  <title>Resolv — Cross-Platform DNS Benchmark &amp; Privacy Probe</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -29,10 +29,9 @@
     <div class="max-w-7xl mx-auto px-5 h-14 flex items-center justify-between gap-4">
       <!-- Brand Identity -->
       <div class="flex items-center gap-3">
-        <img src="icon.svg" alt="Resolv / PulseDNS" class="w-8 h-8 rounded-lg border border-zinc-800" />
+        <img src="icon.svg" alt="Resolv" class="w-8 h-8 rounded-lg border border-zinc-800" />
         <div class="flex items-center gap-2">
           <span class="font-semibold tracking-tight text-zinc-100 text-[15px]">Resolv</span>
-          <span class="text-xs text-zinc-500 font-mono">PulseDNS</span>
           <span id="appVersionBadge" class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">v1.0.0</span>
           <span id="elevatedBadge" class="hidden text-[11px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300" title="Running with Administrator / Root privileges">Admin</span>
           <span id="offlineBadge" class="hidden text-[11px] font-mono px-1.5 py-0.5 rounded bg-rose-950/80 border border-rose-800 text-rose-300" title="No active network route detected">Offline</span>
@@ -85,7 +84,7 @@
         <!-- About & GPLv3 License Modal Trigger -->
         <button id="openAboutModalBtn" type="button"
           class="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition"
-          title="About Resolv / PulseDNS &amp; GNU GPLv3 License">
+          title="About Resolv &amp; GNU GPLv3 License">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
         </button>
       </div>
@@ -385,7 +384,7 @@
   <!-- Footer -->
   <footer class="border-t border-zinc-900 py-3 px-5 text-[11px] text-zinc-500">
     <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-      <div>Resolv (PulseDNS Engine) — Pure-Go DNS Benchmark (UDP · TCP · DoH · DoT), DNSSEC &amp; AdBlock Probe, ISP Hijack Detection.</div>
+      <div>Resolv — Pure-Go DNS Benchmark (UDP · TCP · DoH · DoT), DNSSEC &amp; AdBlock Probe, ISP Hijack Detection.</div>
       <div class="font-mono">SPDX-License-Identifier: GPL-3.0-or-later</div>
     </div>
   </footer>
@@ -481,14 +480,14 @@
     </div>
   </div>
 
-  <!-- MODAL 4: About Resolv / PulseDNS & GNU GPLv3 License -->
+  <!-- MODAL 4: About Resolv & GNU GPLv3 License -->
   <div id="aboutModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="w-full max-w-lg rounded-2xl bg-[#121215] border border-zinc-800 shadow-2xl p-5 text-xs">
       <div class="flex items-center justify-between pb-3 border-b border-zinc-800">
         <div class="flex items-center gap-3">
-          <img src="icon.svg" alt="Resolv / PulseDNS" class="w-9 h-9 rounded-xl border border-zinc-800" />
+          <img src="icon.svg" alt="Resolv" class="w-9 h-9 rounded-xl border border-zinc-800" />
           <div>
-            <h3 class="text-sm font-semibold text-zinc-100">Resolv · PulseDNS</h3>
+            <h3 class="text-sm font-semibold text-zinc-100">Resolv</h3>
             <p id="aboutVersionArch" class="font-mono text-[11px] text-zinc-400">v1.0.0 · Cross-Platform Wails v2 Desktop App</p>
           </div>
         </div>
@@ -497,7 +496,7 @@
 
       <div class="mt-4 space-y-3 text-zinc-300 leading-relaxed">
         <p>
-          <strong>Resolv (PulseDNS)</strong> is a free, open-source, cross-platform DNS benchmarking, privacy-probing, and switching utility built with Go, <code class="text-zinc-200">github.com/miekg/dns</code>, and Wails v2.
+          <strong>Resolv</strong> is a free, open-source, cross-platform DNS benchmarking, privacy-probing, and switching utility built with Go, <code class="text-zinc-200">github.com/miekg/dns</code>, and Wails v2.
         </p>
         <div class="rounded-lg bg-zinc-900 border border-zinc-800 p-3 font-mono text-[11px] text-zinc-300 space-y-1.5">
           <div class="text-emerald-400 font-semibold">GNU General Public License v3.0 (GPL-3.0-or-later)</div>
