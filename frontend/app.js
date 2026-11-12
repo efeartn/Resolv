@@ -1,0 +1,1189 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Resolv / PulseDNS contributors
+
+(() => {
+  'use strict';
+
+  // Application UI State
+  const state = {
+    mode: 'simple',            // 'simple' | 'pro'
+    categoryFilter: 'all',     // 'all' | 'Privacy' | 'Ad-blocking' | 'Standard' | 'Family'
+    searchQuery: '',           // free-text filter
+    sortBy: 'rank',            // 'rank' | 'avg' | 'p95' | 'cached' | 'uncached' | 'jitter'
+    running: false,
+    expandedIds: new Set(),    // Resolver IDs expanded in Simple Mode
+    network: null,
+    resolvers: [],
+    report: null,
+    defaultOptions: {
+      queries: 10,
+      timeoutMs: 2000,
+      workers: 12,
+      staggerMs: 12,
+      protocols: ['udp', 'doh'],
+      cachedDomains: ['cloudflare.com', 'google.com', 'apple.com'],
+      uncachedBase: 'example.com',
+      checkIntegrity: true
+    },
+    currentExportFormat: 'md'
+  };
+
+  // Wails Backend Bridge (with graceful browser-preview fallback if opened outside Wails)
+  const hasWails = () => Boolean(window.go && window.go.main && window.go.main.App);
+  const backend = {
+    async GetBootstrap() {
+      if (hasWails()) return window.go.main.App.GetBootstrap();
+      return demoBridge.getBootstrap();
+    },
+    async RefreshNetwork() {
+      if (hasWails()) return window.go.main.App.RefreshNetwork();
+      return demoBridge.getBootstrap();
+    },
+    async SelectInterface(id) {
+      if (hasWails()) return window.go.main.App.SelectInterface(id);
+      return demoBridge.selectInterface(id);
+    },
+    async AddCustomResolver(name, input) {
+      if (hasWails()) return window.go.main.App.AddCustomResolver(name, input);
+      return demoBridge.addCustomResolver(name, input);
+    },
+    async RemoveCustomResolver(id) {
+      if (hasWails()) return window.go.main.App.RemoveCustomResolver(id);
+      return demoBridge.removeCustomResolver(id);
+    },
+    async RunBenchmark(opts) {
+      if (hasWails()) return window.go.main.App.RunBenchmark(opts);
+      return demoBridge.runBenchmark(opts, handleProgress);
+    },
+    async CancelBenchmark() {
+      if (hasWails()) return window.go.main.App.CancelBenchmark();
+      demoBridge.cancel();
+    },
+    async ApplyResolver(resolverID) {
+      if (hasWails()) return window.go.main.App.ApplyResolver(resolverID);
+      return demoBridge.applyResolver(resolverID);
+    },
+    async ResetDNS() {
+      if (hasWails()) return window.go.main.App.ResetDNS();
+      return demoBridge.resetDNS();
+    },
+    async FlushCache() {
+      if (hasWails()) return window.go.main.App.FlushCache();
+      return { success: true, message: 'OS DNS resolver cache flushed.' };
+    },
+    async ExportReport(format) {
+      if (hasWails()) return window.go.main.App.ExportReport(format);
+      return demoBridge.exportReport(state.report, format);
+    },
+    async SaveReport(format) {
+      if (hasWails()) return window.go.main.App.SaveReport(format);
+      const content = await this.ExportReport(format);
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `resolv-report.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      return a.download;
+    }
+  };
+
+  // DOM helpers
+  const $ = (id) => document.getElementById(id);
+
+  function escapeHTML(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // Latency Tier Styling (<20ms Emerald, 20-60ms Amber, >60ms Rose)
+  function latencyBadgeClass(ms, failed = false) {
+    if (failed || ms === undefined || ms === null || ms <= 0) return 'badge-neutral';
+    if (ms < 20) return 'badge-emerald';
+    if (ms <= 60) return 'badge-amber';
+    return 'badge-rose';
+  }
+
+  function latencyHexColor(ms, failed = false) {
+    if (failed || !ms || ms <= 0) return '#52525b';
+    if (ms < 20) return '#10b981';
+    if (ms <= 60) return '#f59e0b';
+    return '#f43f5e';
+  }
+
+  // Pure SVG Range Bar (Min — Avg — P95 — Max)
+  function renderRangeBarSVG(overall, maxScaleMs, width = 240, height = 22) {
+    if (!overall || !overall.received || overall.received <= 0) {
+      return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" class="block">
+        <line x1="6" y1="${height / 2}" x2="${width - 6}" y2="${height / 2}" stroke="#27272a" stroke-width="2" stroke-linecap="round"/>
+      </svg>`;
+    }
+    const pad = 8;
+    const usable = width - pad * 2;
+    const cap = Math.max(maxScaleMs || 100, overall.maxMs || 1, 25);
+    const toX = (ms) => pad + Math.min(1, Math.max(0, ms / cap)) * usable;
+
+    const xMin = toX(overall.minMs);
+    const xAvg = toX(overall.avgMs);
+    const xP95 = toX(overall.p95Ms || overall.maxMs);
+    const xMax = Math.max(xMin + 2, toX(overall.maxMs));
+    const cy = height / 2;
+    const color = latencyHexColor(overall.avgMs);
+
+    return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" class="block" role="img"
+      aria-label="Min ${overall.minMs.toFixed(1)}ms, Avg ${overall.avgMs.toFixed(1)}ms, P95 ${(overall.p95Ms || overall.maxMs).toFixed(1)}ms, Max ${overall.maxMs.toFixed(1)}ms">
+      <title>Min ${overall.minMs.toFixed(1)} ms · Avg ${overall.avgMs.toFixed(1)} ms · P95 ${(overall.p95Ms || overall.maxMs).toFixed(1)} ms · Max ${overall.maxMs.toFixed(1)} ms</title>
+      <!-- Baseline Track -->
+      <line x1="${pad}" y1="${cy}" x2="${width - pad}" y2="${cy}" stroke="#1f1f23" stroke-width="2"/>
+      <!-- Full Min..Max Whisker Span -->
+      <line x1="${xMin.toFixed(1)}" y1="${cy}" x2="${xMax.toFixed(1)}" y2="${cy}" stroke="#3f3f46" stroke-width="2"/>
+      <line x1="${xMin.toFixed(1)}" y1="${cy - 4}" x2="${xMin.toFixed(1)}" y2="${cy + 4}" stroke="#52525b" stroke-width="1.5"/>
+      <line x1="${xMax.toFixed(1)}" y1="${cy - 4}" x2="${xMax.toFixed(1)}" y2="${cy + 4}" stroke="#52525b" stroke-width="1.5"/>
+      <!-- Min..P95 Core Band -->
+      <rect x="${xMin.toFixed(1)}" y="${cy - 2.5}" width="${Math.max(2, xP95 - xMin).toFixed(1)}" height="5" rx="2" fill="${color}" fill-opacity="0.35"/>
+      <!-- P95 Tick -->
+      <line x1="${xP95.toFixed(1)}" y1="${cy - 5}" x2="${xP95.toFixed(1)}" y2="${cy + 5}" stroke="${color}" stroke-width="1.5"/>
+      <!-- Avg Marker Dot -->
+      <circle cx="${xAvg.toFixed(1)}" cy="${cy}" r="4" fill="#09090b" stroke="${color}" stroke-width="2.2"/>
+    </svg>`;
+  }
+
+  // Pure SVG Chronological Latency Sparkline
+  function renderSparklineSVG(samples, avgMs, width = 128, height = 24) {
+    if (!Array.isArray(samples) || samples.length < 2) {
+      return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="block">
+        <line x1="2" y1="${height / 2}" x2="${width - 2}" y2="${height / 2}" stroke="#27272a" stroke-width="1.5" stroke-dasharray="2 3"/>
+      </svg>`;
+    }
+    const min = Math.min(...samples);
+    const max = Math.max(...samples);
+    const span = Math.max(max - min, 1);
+    const padX = 3;
+    const padY = 4;
+    const w = width - padX * 2;
+    const h = height - padY * 2;
+
+    const pts = samples.map((v, idx) => {
+      const x = padX + (idx / (samples.length - 1)) * w;
+      const y = padY + h - ((v - min) / span) * h;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+
+    const color = latencyHexColor(avgMs);
+    const last = samples[samples.length - 1];
+    const lastY = padY + h - ((last - min) / span) * h;
+
+    return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="block" role="img"
+      aria-label="Latency sparkline (${samples.length} samples)">
+      <title>Query RTT sequence (${samples.length} samples): ${samples.map((s) => s.toFixed(1) + 'ms').join(' → ')}</title>
+      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${(width - padX).toFixed(1)}" cy="${lastY.toFixed(1)}" r="2.2" fill="${color}"/>
+    </svg>`;
+  }
+
+  function categoryBadgeHTML(cat, deprecated = false) {
+    const map = {
+      'Privacy': 'bg-cyan-950/60 border-cyan-800/60 text-cyan-300',
+      'Ad-blocking': 'bg-purple-950/60 border-purple-800/60 text-purple-300',
+      'Standard': 'bg-zinc-800/80 border-zinc-700 text-zinc-300',
+      'Family': 'bg-amber-950/60 border-amber-800/60 text-amber-300',
+      'System': 'bg-emerald-950/60 border-emerald-800/60 text-emerald-300',
+      'Custom': 'bg-indigo-950/60 border-indigo-800/60 text-indigo-300'
+    };
+    const cls = map[cat] || map['Standard'];
+    let html = `<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border ${cls}">${escapeHTML(cat)}</span>`;
+    if (deprecated) {
+      html += ` <span class="text-[10px] font-mono px-1.5 py-0.5 rounded border bg-amber-950/70 border-amber-800/70 text-amber-300" title="Discontinued endpoint">Deprecated</span>`;
+    }
+    return html;
+  }
+
+  function dnssecBadgeHTML(dnssec) {
+    switch (dnssec) {
+      case 'validating':
+        return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300" title="Resolver validates DNSSEC signatures and rejects bogus responses">✓ DNSSEC</span>`;
+      case 'not-validating':
+        return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/60 border border-amber-800/60 text-amber-300" title="Resolver did not reject broken DNSSEC signatures">No DNSSEC</span>`;
+      case 'partial':
+        return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">Partial</span>`;
+      default:
+        return `<span class="text-[10px] font-mono text-zinc-500">—</span>`;
+    }
+  }
+
+  function adBlockBadgeHTML(filtering) {
+    if (!filtering || !filtering.checked) {
+      return `<span class="text-[10px] font-mono text-zinc-500">—</span>`;
+    }
+    if (filtering.blocksAds) {
+      return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-950/60 border border-purple-800/60 text-purple-300" title="Sinkholed ${filtering.blockedCount}/${filtering.testedCount} ad/tracker canary domains (${escapeHTML(filtering.method || 'sinkhole')})">🛡 ${filtering.blockedCount}/${filtering.testedCount} Ads</span>`;
+    }
+    return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400" title="Does not filter ad/tracker domains">Unfiltered</span>`;
+  }
+
+  function hijackBadgeHTML(hijack) {
+    if (!hijack || !hijack.status || hijack.status === 'unknown') {
+      return `<span class="text-[10px] font-mono text-zinc-500">—</span>`;
+    }
+    if (hijack.status === 'clean') {
+      return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300" title="Plain DNS matches encrypted DoH responses">✓ Verified</span>`;
+    }
+    if (hijack.status === 'suspicious') {
+      return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/70 border border-amber-700/70 text-amber-300">⚠ Suspicious</span>`;
+    }
+    return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-rose-950/80 border border-rose-700 text-rose-200 font-semibold">⚠ Hijacked</span>`;
+  }
+
+  function showToast(message, kind = 'info') {
+    const el = $('statusToast');
+    const txt = $('statusToastText');
+    const styles = {
+      success: 'bg-emerald-950/60 border-emerald-800/80 text-emerald-200',
+      error: 'bg-rose-950/60 border-rose-800/80 text-rose-200',
+      info: 'bg-zinc-900 border-zinc-800 text-zinc-200'
+    };
+    el.className = `rounded-xl border px-4 py-3 text-xs flex items-center justify-between gap-3 ${styles[kind] || styles.info}`;
+    txt.textContent = message;
+    el.classList.remove('hidden');
+  }
+
+  // Render Network Header Card & Offline State
+  function renderNetwork() {
+    const net = state.network;
+    if (!net) return;
+
+    $('osNameValue').textContent = net.osName || net.os || 'Unknown OS';
+    $('hostnameValue').textContent = `${net.hostname || 'localhost'} · ${net.arch || ''}`;
+    $('netBackendBadge').textContent = net.backend || net.os;
+
+    $('elevatedBadge').classList.toggle('hidden', !net.elevated);
+
+    const isOffline = net.online === false || navigator.onLine === false;
+    $('offlineBadge').classList.toggle('hidden', !isOffline);
+    $('offlineBanner').classList.toggle('hidden', !isOffline && (!net.warnings || net.warnings.length === 0));
+    if (isOffline) {
+      $('offlineBannerText').textContent = 'No active network route detected. Connect to Wi-Fi or Ethernet and click Re-check Network.';
+    } else if (net.warnings && net.warnings.length > 0) {
+      $('offlineBannerText').textContent = net.warnings.join(' ');
+    }
+
+    const sel = $('interfaceSelect');
+    sel.innerHTML = '';
+    const interfaces = Array.isArray(net.interfaces) ? net.interfaces : [];
+    if (interfaces.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No active interface found';
+      sel.appendChild(opt);
+    } else {
+      interfaces.forEach((iface) => {
+        const opt = document.createElement('option');
+        opt.value = iface.id;
+        opt.textContent = `${iface.name} (${iface.device || iface.kind || iface.id})`;
+        if (net.active && net.active.id === iface.id) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+
+    const active = net.active;
+    if (active) {
+      const ip4 = (active.ipv4 && active.ipv4[0]) || 'no IPv4';
+      const gw = active.gateway || net.gateway || 'no gateway';
+      $('interfaceMetaValue').textContent = `${ip4} · GW ${gw}`;
+      $('dnsModeBadge').textContent = active.dnsManual ? 'Static' : 'DHCP / Auto';
+    } else {
+      $('interfaceMetaValue').textContent = '—';
+      $('dnsModeBadge').textContent = '—';
+    }
+
+    const sysDns = (net.systemDns && net.systemDns.length > 0)
+      ? net.systemDns.join(', ')
+      : (active && active.dns && active.dns.length > 0 ? active.dns.join(', ') : 'None detected');
+    $('currentDnsValue').textContent = sysDns;
+  }
+
+  // Render Winner, KPI Telemetry Strip & Integrity Banners
+  function renderBanners() {
+    const report = state.report;
+    const winnerEl = $('winnerBanner');
+    const hijackEl = $('hijackBanner');
+    const kpiEl = $('kpiSummaryStrip');
+
+    if (!report) {
+      winnerEl.classList.add('hidden');
+      hijackEl.classList.add('hidden');
+      if (kpiEl) kpiEl.classList.add('hidden');
+      $('exportMenuBtn').disabled = true;
+      return;
+    }
+
+    $('exportMenuBtn').disabled = false;
+
+    // Populate KPI Telemetry Strip
+    const validResults = (report.results || []).filter((r) => r.status !== 'failed' && r.overall && r.overall.received > 0);
+    if (kpiEl && validResults.length > 0) {
+      kpiEl.classList.remove('hidden');
+      const byAvg = [...validResults].sort((a, b) => a.overall.avgMs - b.overall.avgMs)[0];
+      const byCached = [...validResults].filter((r) => r.cached && r.cached.received > 0).sort((a, b) => a.cached.avgMs - b.cached.avgMs)[0];
+      const byUncached = [...validResults].filter((r) => r.uncached && r.uncached.received > 0).sort((a, b) => a.uncached.avgMs - b.uncached.avgMs)[0];
+      const dnssecCount = validResults.filter((r) => r.dnssec === 'validating').length;
+      const adBlockCount = validResults.filter((r) => r.filtering && r.filtering.blocksAds).length;
+
+      $('kpiFastestVal').textContent = `${byAvg.resolver.name} · ${byAvg.overall.avgMs.toFixed(1)} ms`;
+      $('kpiFastestSub').textContent = `P95 ${(byAvg.overall.p95Ms || byAvg.overall.maxMs).toFixed(1)} ms · Jitter ${byAvg.overall.jitterMs.toFixed(1)} ms`;
+
+      if (byCached) {
+        $('kpiCachedVal').textContent = `${byCached.resolver.name} · ${byCached.cached.avgMs.toFixed(1)} ms`;
+        $('kpiCachedSub').textContent = `Min ${byCached.cached.minMs.toFixed(1)} ms edge hit`;
+      }
+      if (byUncached) {
+        $('kpiUncachedVal').textContent = `${byUncached.resolver.name} · ${byUncached.uncached.avgMs.toFixed(1)} ms`;
+        $('kpiUncachedSub').textContent = `True recursive authority lookup`;
+      }
+      $('kpiSecurityVal').textContent = `${dnssecCount}/${validResults.length} DNSSEC · ${adBlockCount} AdBlock`;
+      $('kpiSecuritySub').textContent = report.network && report.network.intercepted
+        ? '⚠ Port 53 Intercepted'
+        : '✓ Port 53 Unmodified';
+    }
+
+    if (report.network && (report.network.intercepted || report.network.hijackedCount > 0)) {
+      hijackEl.classList.remove('hidden');
+      $('hijackCountBadge').textContent = report.network.intercepted
+        ? 'Port 53 Intercepted'
+        : `${report.network.hijackedCount} Flagged`;
+      $('hijackSummaryText').textContent = report.network.summary || '';
+    } else {
+      hijackEl.classList.add('hidden');
+    }
+
+    const rec = report.recommendation;
+    if (rec) {
+      winnerEl.classList.remove('hidden');
+      $('winnerAvgBadge').textContent = `${rec.avgMs.toFixed(1)} ms avg`;
+      $('winnerHeadline').textContent = rec.headline;
+      $('winnerDetail').textContent = rec.detail || '';
+      $('winnerApplyBtn').dataset.resolverId = rec.resolverId;
+      $('winnerCopyBtn').dataset.resolverId = rec.resolverId;
+    } else {
+      winnerEl.classList.add('hidden');
+    }
+  }
+
+  // Build unified items list (either benchmarked results or pre-benchmark resolver list)
+  function getDisplayItems() {
+    const cat = state.categoryFilter;
+    const q = (state.searchQuery || '').toLowerCase().trim();
+    const matchesSearch = (r) => {
+      if (!q) return true;
+      const hay = [r.name, r.category, ...(r.ipv4 || []), ...(r.ipv6 || []), r.doh || '', r.dot || ''].join(' ').toLowerCase();
+      return hay.includes(q);
+    };
+
+    if (state.report && Array.isArray(state.report.results) && state.report.results.length > 0) {
+      const filtered = state.report.results.filter((r) => (cat === 'all' || r.resolver.category === cat) && matchesSearch(r.resolver));
+      const metric = (item) => {
+        if (!item.overall || item.status === 'failed') return 999999;
+        switch (state.sortBy) {
+          case 'avg': return item.overall.avgMs;
+          case 'p95': return item.overall.p95Ms || item.overall.maxMs;
+          case 'cached': return item.cached && item.cached.received > 0 ? item.cached.avgMs : 999999;
+          case 'uncached': return item.uncached && item.uncached.received > 0 ? item.uncached.avgMs : 999999;
+          case 'jitter': return item.overall.jitterMs;
+          default: return item.rank;
+        }
+      };
+      return [...filtered].sort((a, b) => metric(a) - metric(b));
+    }
+    return state.resolvers
+      .filter((r) => (cat === 'all' || r.category === cat) && matchesSearch(r))
+      .map((r, idx) => ({
+        resolver: r,
+        rank: idx + 1,
+        status: 'pending',
+        primary: '',
+        overall: null,
+        cached: null,
+        uncached: null,
+        protocols: {},
+        dnssec: 'unknown',
+        filtering: { checked: false, blocksAds: false },
+        hijack: { status: 'unknown' }
+      }));
+  }
+
+  function renderResults() {
+    renderBanners();
+    const items = getDisplayItems();
+
+    let maxCeiling = 80;
+    items.forEach((item) => {
+      if (item.overall && item.overall.maxMs > maxCeiling) {
+        maxCeiling = item.overall.maxMs;
+      }
+    });
+
+    renderSimpleList(items, maxCeiling);
+    renderProTable(items, maxCeiling);
+  }
+
+  function renderSimpleList(items, maxCeiling) {
+    const container = $('simpleListContainer');
+    if (items.length === 0) {
+      container.innerHTML = `<div class="rounded-xl bg-[#121215] border border-zinc-800/80 p-8 text-center text-xs text-zinc-400">No resolvers match the selected category filter.</div>`;
+      return;
+    }
+
+    container.innerHTML = items.map((item) => {
+      const r = item.resolver;
+      const isPending = item.status === 'pending' || !item.overall;
+      const isFailed = item.status === 'failed';
+      const avg = item.overall ? item.overall.avgMs : 0;
+      const expanded = state.expandedIds.has(r.id);
+      const endpoint = (r.ipv4 && r.ipv4.length > 0)
+        ? r.ipv4.join(', ')
+        : (r.doh || r.dot || '—');
+      const canApply = Array.isArray(r.ipv4) && r.ipv4.length > 0 && !r.deprecated;
+
+      return `
+      <div class="resolver-card rounded-xl bg-[#121215] border border-zinc-800/90 overflow-hidden">
+        <!-- Main Row -->
+        <div class="px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 cursor-pointer" data-toggle-row="${escapeHTML(r.id)}">
+          <!-- Left: Rank + Name + Badges -->
+          <div class="flex items-center gap-3 min-w-0 md:w-[36%]">
+            <div class="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center font-mono text-xs text-zinc-400 shrink-0">
+              ${isPending ? '·' : `#${item.rank}`}
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="font-semibold text-sm text-zinc-100 truncate">${escapeHTML(r.name)}</span>
+                ${categoryBadgeHTML(r.category, r.deprecated)}
+                ${item.filtering && item.filtering.blocksAds ? adBlockBadgeHTML(item.filtering) : ''}
+                ${item.hijack && item.hijack.status === 'hijacked' ? hijackBadgeHTML(item.hijack) : ''}
+              </div>
+              <div class="mt-0.5 text-[11px] font-mono text-zinc-400 truncate">${escapeHTML(endpoint)}</div>
+            </div>
+          </div>
+
+          <!-- Center: Pure SVG Min–Avg–P95–Max Range Bar + Sparkline -->
+          <div class="flex-1 flex items-center gap-3">
+            <div class="flex-1">
+              ${renderRangeBarSVG(item.overall, maxCeiling, 280, 22)}
+            </div>
+            ${!isPending && !isFailed && item.overall && item.overall.samples
+              ? `<div class="hidden sm:block shrink-0">${renderSparklineSVG(item.overall.samples, avg, 88, 22)}</div>`
+              : ''
+            }
+          </div>
+
+          <!-- Right: Avg ms Badge + One-Click Actions -->
+          <div class="flex items-center justify-end gap-2 shrink-0" onclick="event.stopPropagation()">
+            ${isPending
+              ? `<span class="badge-neutral text-xs font-mono px-2.5 py-1 rounded-md">Ready</span>`
+              : isFailed
+                ? `<span class="badge-rose text-xs font-mono px-2.5 py-1 rounded-md">Unreachable</span>`
+                : `<span class="${latencyBadgeClass(avg)} text-xs font-mono font-semibold px-2.5 py-1 rounded-md" title="P95: ${(item.overall.p95Ms || avg).toFixed(1)} ms">${avg.toFixed(1)} ms</span>`
+            }
+
+            ${canApply
+              ? `<button type="button" data-apply-resolver="${escapeHTML(r.id)}"
+                  class="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-emerald-500 hover:text-zinc-950 border border-zinc-700 hover:border-emerald-400 text-xs font-medium text-zinc-200 transition">
+                  Apply
+                </button>`
+              : `<button type="button" data-copy-resolver="${escapeHTML(r.id)}"
+                  class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-mono text-zinc-400">
+                  DoH Only
+                </button>`
+            }
+
+            ${r.source === 'custom'
+              ? `<button type="button" data-remove-custom="${escapeHTML(r.id)}" title="Remove custom resolver"
+                  class="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950 border border-zinc-800 text-zinc-400 hover:text-rose-300 text-xs">✕</button>`
+              : ''
+            }
+
+            <button type="button" data-toggle-row="${escapeHTML(r.id)}" title="Inspect protocol telemetry"
+              class="p-1.5 rounded-lg bg-zinc-900/70 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-mono">
+              ${expanded ? '▲' : '▼'}
+            </button>
+          </div>
+        </div>
+
+        <!-- Progressive Disclosure Expandable Telemetry Drawer -->
+        <div class="${expanded ? '' : 'hidden'} border-t border-zinc-800/80 bg-zinc-950/60 px-4 py-3.5 text-xs">
+          ${renderExpandedTelemetry(item)}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderExpandedTelemetry(item) {
+    const r = item.resolver;
+    const o = item.overall;
+    const c = item.cached;
+    const u = item.uncached;
+    const protos = item.protocols || {};
+
+    const fmtStat = (st) => (st && st.received > 0 ? `${st.avgMs.toFixed(2)} ms` : '—');
+    const protoCards = ['udp', 'doh', 'dot', 'tcp'].map((p) => {
+      const pr = protos[p];
+      const label = p.toUpperCase();
+      if (!pr) {
+        return `<div class="rounded-lg bg-zinc-900/60 border border-zinc-800/70 p-2.5">
+          <div class="font-mono text-[10px] uppercase text-zinc-500">${label}</div>
+          <div class="mt-1 font-mono text-xs text-zinc-500">Not tested</div>
+        </div>`;
+      }
+      const ok = pr.combined && pr.combined.received > 0;
+      return `<div class="rounded-lg bg-zinc-900/80 border border-zinc-800 p-2.5">
+        <div class="flex items-center justify-between">
+          <span class="font-mono text-[10px] uppercase text-zinc-400">${label}</span>
+          <span class="font-mono text-[10px] text-zinc-500 truncate max-w-[150px]" title="${escapeHTML(pr.endpoint)}">${escapeHTML(pr.endpoint || '')}</span>
+        </div>
+        <div class="mt-1 flex items-center justify-between gap-2">
+          <span class="font-mono text-sm font-semibold ${ok ? 'text-zinc-100' : 'text-rose-300'}">
+            ${ok ? `${pr.combined.avgMs.toFixed(2)} ms` : escapeHTML(pr.error || 'Failed')}
+          </span>
+          ${ok && pr.combined.samples ? renderSparklineSVG(pr.combined.samples, pr.combined.avgMs, 76, 18) : ''}
+        </div>
+        <div class="mt-0.5 font-mono text-[11px] text-zinc-400">
+          Cached ${fmtStat(pr.cached)} · Uncached ${fmtStat(pr.uncached)} · P95 ${ok ? (pr.combined.p95Ms || pr.combined.maxMs).toFixed(1) + 'ms' : '—'}
+        </div>
+      </div>`;
+    }).join('');
+
+    const findings = (item.hijack && Array.isArray(item.hijack.findings) && item.hijack.findings.length > 0)
+      ? `<ul class="mt-2 list-disc list-inside space-y-1 text-[11px] text-zinc-300">${item.hijack.findings.map((f) => `<li>${escapeHTML(f)}</li>`).join('')}</ul>`
+      : '';
+
+    return `
+      <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-zinc-800/70">
+        <div class="text-zinc-300">${escapeHTML(r.description || 'Custom or system DNS resolver.')}</div>
+        <div class="flex flex-wrap items-center gap-2">
+          ${dnssecBadgeHTML(item.dnssec)}
+          ${adBlockBadgeHTML(item.filtering)}
+          ${hijackBadgeHTML(item.hijack)}
+          <button type="button" data-copy-resolver="${escapeHTML(r.id)}"
+            class="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 font-mono text-[11px] text-emerald-300">
+            Copy DNS / Manual Command
+          </button>
+        </div>
+      </div>
+
+      ${o ? `
+      <div class="grid grid-cols-2 sm:grid-cols-6 gap-2.5 mt-3">
+        <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 p-2.5">
+          <div class="text-[10px] font-mono uppercase text-zinc-400">Cached Avg</div>
+          <div class="mt-0.5 font-mono text-sm font-semibold text-emerald-300">${fmtStat(c)}</div>
+          <div class="text-[10px] text-zinc-500">Edge cache hit</div>
+        </div>
+        <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 p-2.5">
+          <div class="text-[10px] font-mono uppercase text-zinc-400">Uncached Avg</div>
+          <div class="mt-0.5 font-mono text-sm font-semibold text-cyan-300">${fmtStat(u)}</div>
+          <div class="text-[10px] text-zinc-500">UUID recursive</div>
+        </div>
+        <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 p-2.5">
+          <div class="text-[10px] font-mono uppercase text-zinc-400">P95 / Median</div>
+          <div class="mt-0.5 font-mono text-sm font-semibold text-zinc-100">${(o.p95Ms || o.maxMs).toFixed(1)} / ${o.medianMs.toFixed(1)} ms</div>
+          <div class="text-[10px] text-zinc-500">Min ${o.minMs.toFixed(1)} · Max ${o.maxMs.toFixed(1)} ms</div>
+        </div>
+        <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 p-2.5">
+          <div class="text-[10px] font-mono uppercase text-zinc-400">Jitter (σ)</div>
+          <div class="mt-0.5 font-mono text-sm font-semibold text-zinc-100">${o.jitterMs.toFixed(2)} ms</div>
+          <div class="text-[10px] text-zinc-500">Std deviation</div>
+        </div>
+        <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 p-2.5">
+          <div class="text-[10px] font-mono uppercase text-zinc-400">Reliability</div>
+          <div class="mt-0.5 font-mono text-sm font-semibold text-zinc-100">${(100 - o.lossPct).toFixed(0)}%</div>
+          <div class="text-[10px] text-zinc-500">${o.received}/${o.sent} (${o.lossPct.toFixed(0)}% loss)</div>
+        </div>
+        <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 p-2.5">
+          <div class="text-[10px] font-mono uppercase text-zinc-400">Egress Identity</div>
+          <div class="mt-0.5 font-mono text-xs font-semibold text-zinc-200 truncate">${escapeHTML((item.hijack && item.hijack.udpEgress) || '—')}</div>
+          <div class="text-[10px] text-zinc-500 truncate">DoH: ${escapeHTML((item.hijack && item.hijack.dohEgress) || '—')}</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5 mt-2.5">
+        ${protoCards}
+      </div>
+      ${findings}
+      ` : `<div class="mt-3 text-zinc-400 font-mono">Click “Run Speed Test” above to measure cached vs. uncached latency, P95, jitter, DNSSEC, ad-blocking, and ISP hijacking.</div>`}
+    `;
+  }
+
+  function renderProTable(items, maxCeiling) {
+    const tbody = $('proTableBody');
+    if (items.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="15" class="py-8 text-center text-zinc-400">No resolvers match the selected filter.</td></tr>`;
+      return;
+    }
+
+    const protoCell = (item, p) => {
+      const pr = item.protocols && item.protocols[p];
+      if (!pr || !pr.combined) return '<span class="text-zinc-600">—</span>';
+      if (pr.combined.received === 0) return `<span class="text-rose-400">${escapeHTML(pr.error || 'err')}</span>`;
+      return `${pr.combined.avgMs.toFixed(1)} ms`;
+    };
+
+    tbody.innerHTML = items.map((item) => {
+      const r = item.resolver;
+      const o = item.overall;
+      const isPending = item.status === 'pending' || !o;
+      const isFailed = item.status === 'failed';
+      const canApply = Array.isArray(r.ipv4) && r.ipv4.length > 0 && !r.deprecated;
+      const primaryAddr = (r.ipv4 && r.ipv4[0]) || r.doh || r.dot || '—';
+
+      return `
+      <tr class="hover:bg-zinc-900/50 transition">
+        <td class="py-3 px-3 font-mono text-zinc-400">${isPending ? '·' : item.rank}</td>
+        <td class="py-3 px-3">
+          <div class="flex items-center gap-1.5">
+            <span class="font-semibold text-zinc-100">${escapeHTML(r.name)}</span>
+            ${categoryBadgeHTML(r.category, r.deprecated)}
+          </div>
+          <div class="font-mono text-[11px] text-zinc-400 truncate max-w-[190px]">${escapeHTML(primaryAddr)}</div>
+        </td>
+        <td class="py-3 px-2.5 text-right font-mono">
+          ${isPending ? '<span class="text-zinc-500">—</span>' : isFailed ? '<span class="badge-rose px-2 py-0.5 rounded">Failed</span>' : `<span class="${latencyBadgeClass(o.avgMs)} px-2 py-0.5 rounded font-semibold">${o.avgMs.toFixed(2)}</span>`}
+        </td>
+        <td class="py-3 px-2.5 text-right font-mono text-zinc-300">
+          ${!isPending && !isFailed ? `${(o.p95Ms || o.maxMs).toFixed(1)}` : '—'}
+        </td>
+        <td class="py-3 px-3">
+          <div class="flex items-center gap-2 min-w-[210px]">
+            <div class="flex-1">${renderRangeBarSVG(o, maxCeiling, 130, 20)}</div>
+            ${!isPending && !isFailed && o.samples ? renderSparklineSVG(o.samples, o.avgMs, 76, 20) : ''}
+          </div>
+        </td>
+        <td class="py-3 px-2.5 text-right font-mono text-emerald-300">${!isPending && item.cached && item.cached.received > 0 ? item.cached.avgMs.toFixed(2) : '—'}</td>
+        <td class="py-3 px-2.5 text-right font-mono text-cyan-300">${!isPending && item.uncached && item.uncached.received > 0 ? item.uncached.avgMs.toFixed(2) : '—'}</td>
+        <td class="py-3 px-2.5 text-right font-mono text-zinc-300">${!isPending && !isFailed ? `${o.jitterMs.toFixed(2)} ms` : '—'}</td>
+        <td class="py-3 px-2.5 text-right font-mono ${o && o.lossPct > 0 ? 'text-amber-300' : 'text-zinc-400'}">${!isPending ? `${o.lossPct.toFixed(0)}%` : '—'}</td>
+        <td class="py-3 px-2.5 text-right font-mono text-zinc-200">${protoCell(item, 'udp')}</td>
+        <td class="py-3 px-2.5 text-right font-mono text-zinc-200">${protoCell(item, 'doh')}</td>
+        <td class="py-3 px-2.5">${dnssecBadgeHTML(item.dnssec)}</td>
+        <td class="py-3 px-2.5">${adBlockBadgeHTML(item.filtering)}</td>
+        <td class="py-3 px-2.5">${hijackBadgeHTML(item.hijack)}</td>
+        <td class="py-3 px-3 text-right">
+          <div class="inline-flex items-center gap-1.5">
+            ${canApply ? `<button type="button" data-apply-resolver="${escapeHTML(r.id)}" class="px-2.5 py-1 rounded bg-zinc-800 hover:bg-emerald-500 hover:text-zinc-950 text-zinc-100 font-medium transition">Apply</button>` : ''}
+            <button type="button" data-copy-resolver="${escapeHTML(r.id)}" class="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 font-mono text-[11px] text-zinc-300" title="Copy DNS addresses">Copy</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Handle Live Progress Event
+  function handleProgress(p) {
+    if (!p) return;
+    $('progressContainer').classList.remove('hidden');
+    $('progressPhaseBadge').textContent = (p.phase || 'benchmark').toUpperCase();
+    $('progressMessage').textContent = p.message || 'Benchmarking…';
+    const done = Number(p.done || 0);
+    const total = Number(p.total || 1);
+    $('progressCount').textContent = `${done} / ${total}`;
+    const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+    $('progressBar').style.width = `${pct}%`;
+  }
+
+  // Gather Benchmark Options from UI
+  function collectOptions() {
+    const protos = Array.from(document.querySelectorAll('.proto-checkbox:checked')).map((el) => el.value);
+    return {
+      queries: Number($('optQueries').value) || 10,
+      timeoutMs: Number($('optTimeout').value) || 2000,
+      workers: 12,
+      staggerMs: 12,
+      protocols: protos.length > 0 ? protos : ['udp', 'doh'],
+      cachedDomains: ['cloudflare.com', 'google.com', 'apple.com'],
+      uncachedBase: 'example.com',
+      checkIntegrity: Boolean($('optIntegrity').checked)
+    };
+  }
+
+  // Execute Benchmark
+  async function startBenchmark() {
+    if (state.running) return;
+    if (navigator.onLine === false) {
+      showToast('System appears to be offline. Connect to a network before running the benchmark.', 'error');
+      return;
+    }
+    state.running = true;
+    $('runBenchmarkBtn').disabled = true;
+    $('runBenchmarkBtn').classList.add('opacity-60');
+    $('runBtnLabel').textContent = 'Testing DNS…';
+    $('cancelBenchmarkBtn').classList.remove('hidden');
+    $('progressContainer').classList.remove('hidden');
+    $('progressBar').style.width = '2%';
+
+    try {
+      const opts = collectOptions();
+      const report = await backend.RunBenchmark(opts);
+      state.report = report;
+      renderResults();
+      if (report && report.cancelled) {
+        showToast('Benchmark stopped — showing partial measurements.', 'info');
+      } else if (report) {
+        showToast(`Benchmark completed in ${(report.durationMs / 1000).toFixed(1)}s across ${report.results.length} resolvers.`, 'success');
+      }
+    } catch (err) {
+      showToast(`Benchmark failed: ${err.message || err}`, 'error');
+    } finally {
+      state.running = false;
+      $('runBenchmarkBtn').disabled = false;
+      $('runBenchmarkBtn').classList.remove('opacity-60');
+      $('runBtnLabel').textContent = 'Run Speed Test';
+      $('cancelBenchmarkBtn').classList.add('hidden');
+      $('progressContainer').classList.add('hidden');
+    }
+  }
+
+  // Apply Resolver or Show Copy Fallback Modal
+  async function applyResolverById(resolverId) {
+    try {
+      const res = await backend.ApplyResolver(resolverId);
+      if (res.network) {
+        state.network = res.network;
+        renderNetwork();
+      }
+      if (res.success) {
+        showToast(res.message, 'success');
+      } else if (res.needsManual) {
+        openManualFallbackModal(res);
+      } else {
+        showToast(res.message || 'Could not apply DNS settings.', 'error');
+      }
+    } catch (err) {
+      showToast(`Error applying DNS: ${err.message || err}`, 'error');
+    }
+  }
+
+  function openCopyModalForResolver(resolverId) {
+    const r = state.resolvers.find((x) => x.id === resolverId) ||
+      (state.report && state.report.results.map((x) => x.resolver).find((x) => x.id === resolverId));
+    if (!r) return;
+    const addrs = [...(r.ipv4 || []), ...(r.ipv6 || []).slice(0, 2)];
+    const displayAddrs = addrs.length > 0 ? addrs : [r.doh || r.dot || ''];
+    const ifaceName = (state.network && state.network.active && state.network.active.name) || 'Wi-Fi / Ethernet';
+    openManualFallbackModal({
+      message: `Copy ${r.name}'s addresses below or run the one-liner command in an elevated terminal.`,
+      addresses: displayAddrs,
+      manual: {
+        steps: [
+          `Open your system Network Settings for “${ifaceName}”.`,
+          `Paste the primary and secondary addresses below into the DNS configuration field.`,
+          r.doh ? `Optional DoH endpoint: ${r.doh}` : 'Save changes and flush your DNS cache.'
+        ],
+        command: buildQuickCommand(addrs, ifaceName)
+      }
+    });
+  }
+
+  function buildQuickCommand(addrs, ifaceName) {
+    if (!addrs || addrs.length === 0) return '# Encrypted DoH/DoT endpoint only';
+    const os = (state.network && state.network.os) || 'windows';
+    if (os === 'darwin') {
+      return `sudo networksetup -setdnsservers "${ifaceName}" ${addrs.join(' ')} && sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder`;
+    }
+    if (os === 'linux') {
+      return `nmcli connection modify "${ifaceName}" ipv4.dns "${addrs.filter((a) => !a.includes(':')).join(' ')}" ipv4.ignore-auto-dns yes && resolvectl flush-caches`;
+    }
+    const idx = (state.network && state.network.active && state.network.active.id) || '1';
+    return `Set-DnsClientServerAddress -InterfaceIndex ${idx} -ServerAddresses @(${addrs.map((a) => `'${a}'`).join(',')}); ipconfig /flushdns`;
+  }
+
+  function openManualFallbackModal(actionRes) {
+    $('manualModalMessage').textContent = actionRes.message || '';
+    const addrs = (actionRes.addresses || []).join(', ');
+    $('manualAddressesBox').textContent = addrs || '—';
+    const manual = actionRes.manual || { steps: [], command: '' };
+    $('manualCommandBox').textContent = manual.command || '—';
+    $('manualStepsList').innerHTML = (manual.steps || []).map((s) => `<li>${escapeHTML(s)}</li>`).join('');
+    $('manualFallbackModal').classList.remove('hidden');
+  }
+
+  function setMode(mode) {
+    state.mode = mode === 'pro' ? 'pro' : 'simple';
+    $('modeSimpleBtn').classList.toggle('active', state.mode === 'simple');
+    $('modeProBtn').classList.toggle('active', state.mode === 'pro');
+    $('simpleViewSection').classList.toggle('hidden', state.mode !== 'simple');
+    $('proViewSection').classList.toggle('hidden', state.mode !== 'pro');
+    $('proConfigBar').classList.toggle('hidden', state.mode !== 'pro');
+  }
+
+  async function openExportModal(format) {
+    state.currentExportFormat = format;
+    $('exportDropdown').classList.add('hidden');
+    try {
+      const content = await backend.ExportReport(format);
+      $('exportModalTitle').textContent = `Export Benchmark Report (${format.toUpperCase()})`;
+      $('exportTextarea').value = content;
+      $('exportStatusHint').textContent = `${content.length.toLocaleString()} bytes ready`;
+      $('exportModal').classList.remove('hidden');
+    } catch (err) {
+      showToast(`Export error: ${err.message || err}`, 'error');
+    }
+  }
+
+  function bindEvents() {
+    if (window.runtime && typeof window.runtime.EventsOn === 'function') {
+      window.runtime.EventsOn('benchmark:progress', handleProgress);
+    }
+
+    window.addEventListener('online', () => renderNetwork());
+    window.addEventListener('offline', () => renderNetwork());
+
+    $('modeSimpleBtn').addEventListener('click', () => setMode('simple'));
+    $('modeProBtn').addEventListener('click', () => setMode('pro'));
+
+    if ($('searchResolverInput')) {
+      $('searchResolverInput').addEventListener('input', (e) => {
+        state.searchQuery = e.target.value;
+        renderResults();
+      });
+    }
+    if ($('sortSelect')) {
+      $('sortSelect').addEventListener('change', (e) => {
+        state.sortBy = e.target.value;
+        renderResults();
+      });
+    }
+
+    // Keyboard shortcuts (Linear / Raycast style)
+    window.addEventListener('keydown', (e) => {
+      const tag = (e.target && e.target.tagName) || '';
+      const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      if (e.key === 'Escape') {
+        document.querySelectorAll('[id$="Modal"]').forEach((m) => m.classList.add('hidden'));
+        $('exportDropdown').classList.add('hidden');
+        if (inInput && e.target.id === 'searchResolverInput') {
+          e.target.value = '';
+          state.searchQuery = '';
+          e.target.blur();
+          renderResults();
+        }
+        return;
+      }
+      if (!inInput && (e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k'))) {
+        e.preventDefault();
+        if ($('searchResolverInput')) $('searchResolverInput').focus();
+      } else if (!inInput && e.altKey && e.key === '1') {
+        setMode('simple');
+      } else if (!inInput && e.altKey && e.key === '2') {
+        setMode('pro');
+      }
+    });
+
+    $('runBenchmarkBtn').addEventListener('click', startBenchmark);
+    $('cancelBenchmarkBtn').addEventListener('click', () => backend.CancelBenchmark());
+
+    const doRefreshNet = async () => {
+      const b = await backend.RefreshNetwork();
+      applyBootstrap(b);
+      showToast('Network interface state refreshed.', 'info');
+    };
+    $('refreshNetBtn').addEventListener('click', doRefreshNet);
+    $('offlineRetryBtn').addEventListener('click', doRefreshNet);
+
+    $('interfaceSelect').addEventListener('change', async (e) => {
+      if (!e.target.value) return;
+      const b = await backend.SelectInterface(e.target.value);
+      applyBootstrap(b);
+    });
+
+    $('resetDnsBtn').addEventListener('click', async () => {
+      const res = await backend.ResetDNS();
+      if (res.network) {
+        state.network = res.network;
+        renderNetwork();
+      }
+      showToast(res.message, res.success ? 'success' : 'error');
+    });
+
+    $('flushCacheBtn').addEventListener('click', async () => {
+      const res = await backend.FlushCache();
+      showToast(res.message, res.success ? 'success' : 'error');
+    });
+
+    $('winnerApplyBtn').addEventListener('click', (e) => {
+      const id = e.currentTarget.dataset.resolverId;
+      if (id) applyResolverById(id);
+    });
+
+    $('winnerCopyBtn').addEventListener('click', (e) => {
+      const id = e.currentTarget.dataset.resolverId;
+      if (id) openCopyModalForResolver(id);
+    });
+
+    $('statusToastClose').addEventListener('click', () => $('statusToast').classList.add('hidden'));
+
+    $('categoryFilterGroup').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-cat]');
+      if (!btn) return;
+      state.categoryFilter = btn.dataset.cat;
+      document.querySelectorAll('#categoryFilterGroup .cat-chip').forEach((el) => {
+        const active = el.dataset.cat === state.categoryFilter;
+        el.className = active
+          ? 'cat-chip active px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-800 text-zinc-100 border border-zinc-700'
+          : 'cat-chip px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800';
+      });
+      renderResults();
+    });
+
+    document.body.addEventListener('click', async (e) => {
+      if (!e.target.closest('#exportMenuBtn') && !e.target.closest('#exportDropdown')) {
+        $('exportDropdown').classList.add('hidden');
+      }
+      const applyBtn = e.target.closest('[data-apply-resolver]');
+      if (applyBtn) {
+        applyResolverById(applyBtn.dataset.applyResolver);
+        return;
+      }
+      const copyBtn = e.target.closest('[data-copy-resolver]');
+      if (copyBtn) {
+        openCopyModalForResolver(copyBtn.dataset.copyResolver);
+        return;
+      }
+      const rmBtn = e.target.closest('[data-remove-custom]');
+      if (rmBtn) {
+        const list = await backend.RemoveCustomResolver(rmBtn.dataset.removeCustom);
+        state.resolvers = list;
+        renderResults();
+        showToast('Custom resolver removed.', 'info');
+        return;
+      }
+      const toggleRow = e.target.closest('[data-toggle-row]');
+      if (toggleRow) {
+        const id = toggleRow.dataset.toggleRow;
+        if (state.expandedIds.has(id)) state.expandedIds.delete(id);
+        else state.expandedIds.add(id);
+        renderResults();
+      }
+    });
+
+    $('openCustomModalBtn').addEventListener('click', () => {
+      $('customDnsError').classList.add('hidden');
+      $('customDnsModal').classList.remove('hidden');
+    });
+    $('openAboutModalBtn').addEventListener('click', () => $('aboutModal').classList.remove('hidden'));
+
+    document.querySelectorAll('[data-close-modal]').forEach((btn) => {
+      btn.addEventListener('click', () => $(btn.dataset.closeModal).classList.add('hidden'));
+    });
+
+    $('customDnsForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = $('customNameInput').value.trim();
+      const input = $('customEndpointInput').value.trim();
+      try {
+        const resolvers = await backend.AddCustomResolver(name, input);
+        state.resolvers = resolvers;
+        $('customNameInput').value = '';
+        $('customEndpointInput').value = '';
+        $('customDnsModal').classList.add('hidden');
+        renderResults();
+        showToast('Added custom DNS resolver.', 'success');
+      } catch (err) {
+        const errBox = $('customDnsError');
+        errBox.textContent = err.message || String(err);
+        errBox.classList.remove('hidden');
+      }
+    });
+
+    $('exportMenuBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      $('exportDropdown').classList.toggle('hidden');
+    });
+    document.querySelectorAll('[data-export]').forEach((btn) => {
+      btn.addEventListener('click', () => openExportModal(btn.dataset.export));
+    });
+    $('copyExportBtn').addEventListener('click', async () => {
+      await navigator.clipboard.writeText($('exportTextarea').value);
+      $('exportStatusHint').textContent = 'Copied to clipboard!';
+    });
+    $('saveExportFileBtn').addEventListener('click', async () => {
+      const saved = await backend.SaveReport(state.currentExportFormat);
+      if (saved) $('exportStatusHint').textContent = `Saved to ${saved}`;
+    });
+
+    $('copyAddressesBtn').addEventListener('click', async () => {
+      await navigator.clipboard.writeText($('manualAddressesBox').textContent);
+      showToast('Copied DNS addresses to clipboard.', 'success');
+    });
+    $('copyCommandBtn').addEventListener('click', async () => {
+      await navigator.clipboard.writeText($('manualCommandBox').textContent);
+      showToast('Copied terminal command to clipboard.', 'success');
+    });
+  }
+
+  function applyBootstrap(b) {
+    if (!b) return;
+    $('appVersionBadge').textContent = `v${b.version || '1.0.0'}`;
+    if (b.network) {
+      state.network = b.network;
+      $('aboutVersionArch').textContent = `v${b.version || '1.0.0'} · ${b.network.osName || b.network.os} (${b.network.arch || 'amd64'})`;
+    }
+    if (Array.isArray(b.resolvers)) state.resolvers = b.resolvers;
+    if (b.defaultOptions) state.defaultOptions = b.defaultOptions;
+    if (b.lastReport) state.report = b.lastReport;
+
+    renderNetwork();
+    renderResults();
+  }
+
+  // Standalone Browser Demo Bridge (only used when previewed outside Wails webview)
+  const demoBridge = (() => {
+    let cancelled = false;
+    const demoNet = {
+      os: 'windows',
+      osName: 'Windows 11 Pro (Browser Preview)',
+      arch: 'amd64',
+      hostname: 'workstation',
+      elevated: false,
+      online: true,
+      backend: 'powershell',
+      gateway: '192.168.1.1',
+      systemDns: ['192.168.1.1'],
+      active: {
+        id: '12',
+        name: 'Wi-Fi',
+        device: 'Intel Wi-Fi 6E AX211',
+        kind: 'wifi',
+        ipv4: ['192.168.1.42'],
+        ipv6: [],
+        gateway: '192.168.1.1',
+        dns: ['192.168.1.1'],
+        dnsManual: false
+      },
+      interfaces: [
+        { id: '12', name: 'Wi-Fi', device: 'Intel Wi-Fi 6E AX211', kind: 'wifi', ipv4: ['192.168.1.42'], gateway: '192.168.1.1', dns: ['192.168.1.1'], dnsManual: false }
+      ]
+    };
+    let resolvers = [
+      { id: 'system-dns', name: 'Current System DNS', category: 'System', source: 'system', description: 'Active DNS server configured on your OS.', ipv4: ['192.168.1.1'] },
+      { id: 'cloudflare', name: 'Cloudflare', category: 'Privacy', source: 'builtin', description: 'Fast anycast resolver with a strict no-logging policy.', ipv4: ['1.1.1.1', '1.0.0.1'], doh: 'https://cloudflare-dns.com/dns-query', dot: 'one.one.one.one' },
+      { id: 'google', name: 'Google Public DNS', category: 'Standard', source: 'builtin', description: 'Large global anycast network operated by Google.', ipv4: ['8.8.8.8', '8.8.4.4'], doh: 'https://dns.google/dns-query', dot: 'dns.google' },
+      { id: 'quad9', name: 'Quad9', category: 'Privacy', source: 'builtin', description: 'Non-profit resolver with malware-domain blocking and DNSSEC.', ipv4: ['9.9.9.9', '149.112.112.112'], doh: 'https://dns.quad9.net/dns-query', dot: 'dns.quad9.net' },
+      { id: 'adguard', name: 'AdGuard DNS', category: 'Ad-blocking', source: 'builtin', description: 'Blocks ads, trackers and phishing at the DNS level.', ipv4: ['94.140.14.14', '94.140.15.15'], doh: 'https://dns.adguard-dns.com/dns-query', dot: 'dns.adguard-dns.com' },
+      { id: 'nextdns', name: 'NextDNS', category: 'Privacy', source: 'builtin', description: 'Configurable privacy resolver.', ipv4: ['45.90.28.0', '45.90.30.0'], doh: 'https://dns.nextdns.io', dot: 'dns.nextdns.io' },
+      { id: 'opendns', name: 'OpenDNS', category: 'Standard', source: 'builtin', description: 'Cisco Umbrella public resolver with phishing protection.', ipv4: ['208.67.222.222', '208.67.220.220'], doh: 'https://doh.opendns.com/dns-query', dot: 'dns.opendns.com' },
+      { id: 'controld', name: 'Control D', category: 'Standard', source: 'builtin', description: 'Free unfiltered resolver by Control D.', ipv4: ['76.76.2.0', '76.76.10.0'], doh: 'https://freedns.controld.com/p0', dot: 'p0.freedns.controld.com' },
+      { id: 'cleanbrowsing', name: 'CleanBrowsing Family', category: 'Family', source: 'builtin', description: 'Family filter: blocks adult content and enforces SafeSearch.', ipv4: ['185.228.168.168', '185.228.169.168'], doh: 'https://doh.cleanbrowsing.org/doh/family-filter/', dot: 'family-filter-dns.cleanbrowsing.org' },
+      { id: 'mullvad', name: 'Mullvad DNS', category: 'Privacy', source: 'builtin', description: 'Encrypted-only (DoH/DoT) resolver.', doh: 'https://dns.mullvad.net/dns-query', dot: 'dns.mullvad.net', deprecated: true }
+    ];
+
+    return {
+      getBootstrap: () => ({ version: '1.0.0', network: demoNet, resolvers }),
+      selectInterface: () => ({ version: '1.0.0', network: demoNet, resolvers }),
+      addCustomResolver(name, input) {
+        if (!input) throw new Error('Enter an IPv4/IPv6 address or DoH URL');
+        resolvers = [...resolvers, { id: 'custom-' + Date.now(), name: name || input, category: 'Custom', source: 'custom', ipv4: [input] }];
+        return resolvers;
+      },
+      removeCustomResolver(id) {
+        resolvers = resolvers.filter((r) => r.id !== id);
+        return resolvers;
+      },
+      cancel() { cancelled = true; },
+      async runBenchmark(opts, onProgress) {
+        cancelled = false;
+        const bases = { 'cloudflare': 11.4, 'quad9': 16.8, 'google': 18.9, 'nextdns': 22.4, 'controld': 24.7, 'adguard': 29.5, 'opendns': 34.2, 'system-dns': 41.6, 'cleanbrowsing': 48.3, 'mullvad': 64.1 };
+        const total = resolvers.length;
+        for (let i = 0; i < total; i++) {
+          if (cancelled) break;
+          onProgress({ phase: 'benchmark', done: i + 1, total, message: `Querying ${resolvers[i].name} over UDP & DoH` });
+          await new Promise((r) => setTimeout(r, 75));
+        }
+        const results = resolvers.map((r) => {
+          const base = bases[r.id] || 31.0;
+          const cachedAvg = +(base * 0.68).toFixed(2);
+          const uncachedAvg = +(base * 1.32).toFixed(2);
+          const avg = +((cachedAvg + uncachedAvg) / 2).toFixed(2);
+          const jitter = +(base * 0.14).toFixed(2);
+          const minMs = +(cachedAvg * 0.82).toFixed(2);
+          const maxMs = +(uncachedAvg * 1.25).toFixed(2);
+          const p95Ms = +(uncachedAvg * 1.16).toFixed(2);
+          const samples = [
+            +(cachedAvg * 0.85).toFixed(2), +(uncachedAvg * 1.12).toFixed(2),
+            +(cachedAvg * 0.94).toFixed(2), +(uncachedAvg * 0.96).toFixed(2),
+            +(cachedAvg * 1.02).toFixed(2), +(uncachedAvg * 1.21).toFixed(2),
+            +(cachedAvg * 0.88).toFixed(2), +(uncachedAvg * 1.04).toFixed(2),
+            +(cachedAvg * 0.91).toFixed(2), +(uncachedAvg * 1.16).toFixed(2)
+          ];
+          const blocksAds = r.id === 'adguard';
+          return {
+            resolver: r,
+            rank: 0,
+            status: 'ok',
+            score: avg + jitter * 0.5,
+            primary: 'udp',
+            overall: { sent: 20, received: 20, avgMs: avg, minMs, maxMs, medianMs: avg, p95Ms, jitterMs: jitter, lossPct: 0, samples },
+            cached: { sent: 10, received: 10, avgMs: cachedAvg, minMs, maxMs: +(cachedAvg * 1.18).toFixed(2), medianMs: cachedAvg, p95Ms: +(cachedAvg * 1.14).toFixed(2), jitterMs: +(jitter * 0.7).toFixed(2), lossPct: 0 },
+            uncached: { sent: 10, received: 10, avgMs: uncachedAvg, minMs: +(uncachedAvg * 0.88).toFixed(2), maxMs, medianMs: uncachedAvg, p95Ms, jitterMs: jitter, lossPct: 0 },
+            protocols: {
+              udp: r.ipv4 ? { protocol: 'udp', endpoint: `${r.ipv4[0]}:53`, cached: { received: 10, avgMs: cachedAvg }, uncached: { received: 10, avgMs: uncachedAvg }, combined: { received: 20, avgMs: avg, p95Ms, maxMs, lossPct: 0, samples } } : undefined,
+              doh: r.doh ? { protocol: 'doh', endpoint: r.doh, cached: { received: 10, avgMs: +(cachedAvg * 1.09).toFixed(2) }, uncached: { received: 10, avgMs: +(uncachedAvg * 1.07).toFixed(2) }, combined: { received: 20, avgMs: +(avg * 1.08).toFixed(2), p95Ms: +(p95Ms * 1.08).toFixed(2), maxMs: +(maxMs * 1.08).toFixed(2), lossPct: 0, samples } } : undefined
+            },
+            dnssec: 'validating',
+            filtering: { checked: true, blocksAds, blockedCount: blocksAds ? 3 : 0, testedCount: 3, method: blocksAds ? 'sinkhole-ip' : 'none' },
+            hijack: { status: 'clean', udpEgress: '172.68.10.12', dohEgress: '172.68.10.19' }
+          };
+        }).sort((a, b) => a.score - b.score).map((item, idx) => ({ ...item, rank: idx + 1 }));
+
+        return {
+          version: '1.0.0',
+          durationMs: 1420,
+          options: opts,
+          results,
+          recommendation: {
+            resolverId: 'cloudflare',
+            name: 'Cloudflare',
+            avgMs: 11.4,
+            currentAvgMs: 41.6,
+            improvementPct: 72.6,
+            headline: 'Cloudflare is 73% faster than your current DNS',
+            detail: 'Average 11.4 ms · P95 17.4 ms · jitter 1.6 ms · 0% packet loss · Privacy'
+          },
+          network: { checked: true, intercepted: false, hijackedCount: 0, summary: 'No DNS interception or tampering detected.' },
+          cancelled
+        };
+      },
+      applyResolver(id) {
+        const r = resolvers.find((x) => x.id === id);
+        if (!r || !r.ipv4) return { success: false, message: 'No IPv4 addresses available.' };
+        demoNet.systemDns = r.ipv4;
+        demoNet.active.dns = r.ipv4;
+        demoNet.active.dnsManual = true;
+        return { success: true, message: `Applied ${r.name} (${r.ipv4.join(', ')}) to Wi-Fi and flushed DNS cache.`, addresses: r.ipv4, network: demoNet };
+      },
+      resetDNS() {
+        demoNet.systemDns = ['192.168.1.1'];
+        demoNet.active.dns = ['192.168.1.1'];
+        demoNet.active.dnsManual = false;
+        return { success: true, message: 'Reset Wi-Fi to automatic (DHCP) DNS and flushed resolver cache.', network: demoNet };
+      },
+      exportReport(r, fmt) {
+        if (fmt === 'json') return JSON.stringify(r, null, 2);
+        if (fmt === 'csv') return 'rank,name,category,avg_ms,p95_ms,cached_ms,uncached_ms,jitter_ms,loss_pct,blocks_ads\n' +
+          r.results.map((s) => `${s.rank},${s.resolver.name},${s.resolver.category},${s.overall.avgMs},${s.overall.p95Ms},${s.cached.avgMs},${s.uncached.avgMs},${s.overall.jitterMs},${s.overall.lossPct},${s.filtering.blocksAds}`).join('\n');
+        return `# Resolv / PulseDNS Benchmark Report\n\n| # | Resolver | Category | Avg (ms) | P95 | Cached | Uncached | Jitter | Loss | AdBlock |\n|---:|---|---|---:|---:|---:|---:|---:|---:|---|\n` +
+          r.results.map((s) => `| ${s.rank} | ${s.resolver.name} | ${s.resolver.category} | **${s.overall.avgMs}** | ${s.overall.p95Ms} | ${s.cached.avgMs} | ${s.uncached.avgMs} | ${s.overall.jitterMs} | ${s.overall.lossPct}% | ${s.filtering.blocksAds ? 'Yes' : 'No'} |`).join('\n');
+      }
+    };
+  })();
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    bindEvents();
+    try {
+      const b = await backend.GetBootstrap();
+      applyBootstrap(b);
+    } catch (err) {
+      showToast(`Initialization warning: ${err.message || err}`, 'error');
+    }
+  });
+})();

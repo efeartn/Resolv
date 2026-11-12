@@ -1,0 +1,239 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 PulseDNS contributors
+
+package dns
+
+import (
+	"crypto/sha1"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"net"
+	"net/url"
+	"strings"
+)
+
+// Category is a coarse, user-facing classification of a resolver.
+type Category string
+
+const (
+	CategoryStandard Category = "Standard"
+	CategoryPrivacy  Category = "Privacy"
+	CategoryAdBlock  Category = "Ad-blocking"
+	CategoryFamily   Category = "Family"
+	CategorySystem   Category = "System"
+	CategoryCustom   Category = "Custom"
+)
+
+// Source describes where a resolver entry came from.
+type Source string
+
+const (
+	SourceBuiltin Source = "builtin"
+	SourceSystem  Source = "system"
+	SourceGateway Source = "gateway"
+	SourceCustom  Source = "custom"
+)
+
+// Resolver describes a DNS provider and every endpoint PulseDNS knows for it.
+type Resolver struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Category    Category `json:"category"`
+	Source      Source   `json:"source"`
+	Description string   `json:"description,omitempty"`
+	IPv4        []string `json:"ipv4,omitempty"`
+	IPv6        []string `json:"ipv6,omitempty"`
+	DoH         string   `json:"doh,omitempty"` // RFC 8484 endpoint URL
+	DoT         string   `json:"dot,omitempty"` // TLS server name (port 853)
+	Deprecated  bool     `json:"deprecated,omitempty"`
+}
+
+// PrimaryAddr returns the address used for plain DNS (UDP/TCP 53) benchmarks.
+func (r Resolver) PrimaryAddr() string {
+	if len(r.IPv4) > 0 {
+		return r.IPv4[0]
+	}
+	if len(r.IPv6) > 0 {
+		return r.IPv6[0]
+	}
+	return ""
+}
+
+// Applicable reports whether the resolver can be configured as an OS-level
+// DNS server (which requires at least one plain IP address).
+func (r Resolver) Applicable() bool { return len(r.IPv4)+len(r.IPv6) > 0 && !r.Deprecated }
+
+// Addresses returns the addresses to configure on the OS, IPv4 first.
+func (r Resolver) Addresses(includeIPv6 bool) []string {
+	out := append([]string{}, limit(r.IPv4, 2)...)
+	if includeIPv6 || len(out) == 0 {
+		out = append(out, limit(r.IPv6, 2)...)
+	}
+	return out
+}
+
+func limit(s []string, n int) []string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
+}
+
+var builtin = []Resolver{
+	{
+		ID: "cloudflare", Name: "Cloudflare", Category: CategoryPrivacy, Source: SourceBuiltin,
+		Description: "Fast anycast resolver with a strict no-logging policy.",
+		IPv4:        []string{"1.1.1.1", "1.0.0.1"},
+		IPv6:        []string{"2606:4700:4700::1111", "2606:4700:4700::1001"},
+		DoH:         "https://cloudflare-dns.com/dns-query", DoT: "one.one.one.one",
+	},
+	{
+		ID: "google", Name: "Google Public DNS", Category: CategoryStandard, Source: SourceBuiltin,
+		Description: "Large global anycast network operated by Google.",
+		IPv4:        []string{"8.8.8.8", "8.8.4.4"},
+		IPv6:        []string{"2001:4860:4860::8888", "2001:4860:4860::8844"},
+		DoH:         "https://dns.google/dns-query", DoT: "dns.google",
+	},
+	{
+		ID: "quad9", Name: "Quad9", Category: CategoryPrivacy, Source: SourceBuiltin,
+		Description: "Non-profit resolver with malware-domain blocking and DNSSEC.",
+		IPv4:        []string{"9.9.9.9", "149.112.112.112"},
+		IPv6:        []string{"2620:fe::fe", "2620:fe::9"},
+		DoH:         "https://dns.quad9.net/dns-query", DoT: "dns.quad9.net",
+	},
+	{
+		ID: "adguard", Name: "AdGuard DNS", Category: CategoryAdBlock, Source: SourceBuiltin,
+		Description: "Blocks ads, trackers and phishing at the DNS level.",
+		IPv4:        []string{"94.140.14.14", "94.140.15.15"},
+		IPv6:        []string{"2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff"},
+		DoH:         "https://dns.adguard-dns.com/dns-query", DoT: "dns.adguard-dns.com",
+	},
+	{
+		ID: "nextdns", Name: "NextDNS", Category: CategoryPrivacy, Source: SourceBuiltin,
+		Description: "Configurable privacy resolver (default, unconfigured profile).",
+		IPv4:        []string{"45.90.28.0", "45.90.30.0"},
+		IPv6:        []string{"2a07:a8c0::", "2a07:a8c1::"},
+		DoH:         "https://dns.nextdns.io", DoT: "dns.nextdns.io",
+	},
+	{
+		ID: "opendns", Name: "OpenDNS", Category: CategoryStandard, Source: SourceBuiltin,
+		Description: "Cisco Umbrella public resolver with phishing protection.",
+		IPv4:        []string{"208.67.222.222", "208.67.220.220"},
+		IPv6:        []string{"2620:119:35::35", "2620:119:53::53"},
+		DoH:         "https://doh.opendns.com/dns-query", DoT: "dns.opendns.com",
+	},
+	{
+		ID: "controld", Name: "Control D", Category: CategoryStandard, Source: SourceBuiltin,
+		Description: "Free unfiltered resolver by Windscribe's Control D.",
+		IPv4:        []string{"76.76.2.0", "76.76.10.0"},
+		IPv6:        []string{"2606:1a40::", "2606:1a40:1::"},
+		DoH:         "https://freedns.controld.com/p0", DoT: "p0.freedns.controld.com",
+	},
+	{
+		ID: "cleanbrowsing", Name: "CleanBrowsing Family", Category: CategoryFamily, Source: SourceBuiltin,
+		Description: "Family filter: blocks adult content and enforces SafeSearch.",
+		IPv4:        []string{"185.228.168.168", "185.228.169.168"},
+		IPv6:        []string{"2a0d:2a00:1::", "2a0d:2a00:2::"},
+		DoH:         "https://doh.cleanbrowsing.org/doh/family-filter/", DoT: "family-filter-dns.cleanbrowsing.org",
+	},
+	{
+		ID: "mullvad", Name: "Mullvad DNS", Category: CategoryPrivacy, Source: SourceBuiltin,
+		Description: "Encrypted-only (DoH/DoT) resolver. Mullvad announced the service's " +
+			"discontinuation in November 2026; kept for reference and excluded from recommendations.",
+		DoH: "https://dns.mullvad.net/dns-query", DoT: "dns.mullvad.net",
+		Deprecated: true,
+	},
+}
+
+// Builtin returns a copy of the curated resolver list.
+func Builtin() []Resolver {
+	out := make([]Resolver, len(builtin))
+	for i, r := range builtin {
+		r.IPv4 = append([]string(nil), r.IPv4...)
+		r.IPv6 = append([]string(nil), r.IPv6...)
+		out[i] = r
+	}
+	return out
+}
+
+// FromAddresses builds a resolver from plain IP addresses (used for the
+// auto-detected system and gateway resolvers).
+func FromAddresses(id, name string, cat Category, src Source, addrs []string) (Resolver, bool) {
+	r := Resolver{ID: id, Name: name, Category: cat, Source: src}
+	for _, a := range addrs {
+		ip := net.ParseIP(strings.TrimSpace(a))
+		if ip == nil || ip.IsUnspecified() || ip.IsLinkLocalUnicast() || isSiteLocalV6(ip) {
+			continue
+		}
+		if ip.To4() != nil {
+			r.IPv4 = appendUnique(r.IPv4, ip.String())
+		} else {
+			r.IPv6 = appendUnique(r.IPv6, ip.String())
+		}
+	}
+	return r, len(r.IPv4)+len(r.IPv6) > 0
+}
+
+func isSiteLocalV6(ip net.IP) bool {
+	return ip.To4() == nil && len(ip) == net.IPv6len && ip[0] == 0xfe && ip[1]&0xc0 == 0xc0
+}
+
+func appendUnique(s []string, v string) []string {
+	for _, x := range s {
+		if x == v {
+			return s
+		}
+	}
+	return append(s, v)
+}
+
+// ParseCustom parses user input into a resolver. Input may contain one or more
+// tokens separated by commas or whitespace; each token is an IPv4 address,
+// an IPv6 address, an https:// DoH URL or a tls:// DoT host name.
+func ParseCustom(name, input string) (Resolver, error) {
+	r := Resolver{Category: CategoryCustom, Source: SourceCustom}
+	tokens := strings.FieldsFunc(input, func(c rune) bool { return c == ',' || c == ' ' || c == '\t' || c == '\n' || c == ';' })
+	if len(tokens) == 0 {
+		return r, errors.New("enter an IPv4/IPv6 address, a DoH URL (https://…) or a DoT host (tls://…)")
+	}
+	for _, t := range tokens {
+		switch {
+		case strings.HasPrefix(strings.ToLower(t), "https://"):
+			u, err := url.Parse(t)
+			if err != nil || u.Host == "" {
+				return r, fmt.Errorf("invalid DoH URL %q", t)
+			}
+			r.DoH = u.String()
+		case strings.HasPrefix(strings.ToLower(t), "tls://"):
+			host := strings.TrimSuffix(strings.TrimPrefix(t[len("tls://"):], "/"), ":853")
+			if host == "" || strings.ContainsAny(host, "/ ") {
+				return r, fmt.Errorf("invalid DoT host %q", t)
+			}
+			r.DoT = host
+		default:
+			ip := net.ParseIP(strings.Trim(t, "[]"))
+			if ip == nil {
+				return r, fmt.Errorf("%q is not a valid IP address, DoH URL or tls:// host", t)
+			}
+			if ip.To4() != nil {
+				r.IPv4 = appendUnique(r.IPv4, ip.String())
+			} else {
+				r.IPv6 = appendUnique(r.IPv6, ip.String())
+			}
+		}
+	}
+	// A DoT endpoint without an IP needs the host for dialing; with an IP we
+	// dial the IP and use the host for SNI.
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = tokens[0]
+	}
+	if len(name) > 48 {
+		name = name[:48]
+	}
+	r.Name = name
+	sum := sha1.Sum([]byte(strings.Join(tokens, "|")))
+	r.ID = "custom-" + hex.EncodeToString(sum[:])[:10]
+	return r, nil
+}
