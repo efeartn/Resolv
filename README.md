@@ -91,6 +91,11 @@ Standalone binaries are automatically compiled and published by GitHub Actions o
 - **Strict IP Validation Boundary:** Every DNS address passed to an OS mutation command is validated via `net.ParseIP` prior to command construction.
 - **Graceful Non-Admin Fallback:** If the user cancels the elevation prompt or runs without root/admin rights, **Resolv** opens a **"Copy DNS Addresses & Terminal Command"** modal with one-click clipboard copy and OS-specific step-by-step instructions.
 
+### 🔄 4. Built-In Updater, Live Streaming & Persistent History (`internal/updater/`, `internal/config/`)
+- **Startup Auto-Check & Manual Software Update:** Checks GitHub Releases asynchronously on launch (can be toggled in **Settings**) and highlights the header **Updates** pill when a newer version is published. Verifies downloads strictly against `SHA256SUMS.txt` and performs atomic cross-platform replacement and restart.
+- **Zero Config Loss Across Upgrades:** Preferences (`settings.json`), custom DNS resolvers (`custom_resolvers.json`), and the last 25 benchmark runs (`history.json`) are stored inside your OS user configuration directory rather than beside the binary.
+- **Real-Time Row Streaming & Instant Verify:** Benchmarks stream partial snapshots live while queries run, and switching DNS automatically probes your active resolver (`Verify Speed`) to confirm live latency and speedup %.
+
 ---
 
 ## Curated Resolvers
@@ -100,12 +105,16 @@ In addition to auto-detecting your **Current System DNS** and **Local Router / G
 | Provider | Category | Primary IPv4 | Secondary IPv4 | DoH Endpoint (RFC 8484) | DoT Host (`:853`) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Cloudflare** | `Privacy` | `1.1.1.1` | `1.0.0.1` | `https://cloudflare-dns.com/dns-query` | `one.one.one.one` |
+| **Cloudflare Malware** | `Privacy` | `1.1.1.2` | `1.0.0.2` | `https://security.cloudflare-dns.com/dns-query` | `security.cloudflare-dns.com` |
+| **Cloudflare Family** | `Family` | `1.1.1.3` | `1.0.0.3` | `https://family.cloudflare-dns.com/dns-query` | `family.cloudflare-dns.com` |
 | **Google Public DNS** | `Standard` | `8.8.8.8` | `8.8.4.4` | `https://dns.google/dns-query` | `dns.google` |
 | **Quad9** | `Privacy` | `9.9.9.9` | `149.112.112.112` | `https://dns.quad9.net/dns-query` | `dns.quad9.net` |
 | **AdGuard DNS** | `Ad-blocking` | `94.140.14.14` | `94.140.15.15` | `https://dns.adguard-dns.com/dns-query` | `dns.adguard-dns.com` |
+| **AdGuard Family** | `Family` | `94.140.14.15` | `94.140.15.16` | `https://family.adguard-dns.com/dns-query` | `family.adguard-dns.com` |
 | **NextDNS** | `Privacy` | `45.90.28.0` | `45.90.30.0` | `https://dns.nextdns.io` | `dns.nextdns.io` |
 | **OpenDNS** | `Standard` | `208.67.222.222` | `208.67.220.220` | `https://doh.opendns.com/dns-query` | `dns.opendns.com` |
 | **Control D** | `Standard` | `76.76.2.0` | `76.76.10.0` | `https://freedns.controld.com/p0` | `p0.freedns.controld.com` |
+| **Control D AdBlock** | `Ad-blocking` | `76.76.2.2` | `76.76.10.2` | `https://freedns.controld.com/p2` | `p2.freedns.controld.com` |
 | **CleanBrowsing Family** | `Family` | `185.228.168.168` | `185.228.169.168` | `https://doh.cleanbrowsing.org/doh/family-filter/` | `family-filter-dns.cleanbrowsing.org` |
 
 ---
@@ -141,21 +150,29 @@ Resolv/
 │   ├── app.js                      # State manager, pure SVG range-bars & sparklines
 │   └── icon.svg                    # Header & modal vector icon
 └── internal/
+    ├── config/
+    │   ├── config.go               # Persistent settings, custom resolvers & run history (JSON)
+    │   └── config_test.go          # Isolated unit tests for persistence & normalization
     ├── dns/
     │   ├── resolvers.go            # Built-in resolvers + system/gateway/custom parser
     │   ├── transport.go            # UDP :53, TCP :53, DoH (RFC 8484), DoT :853 queriers
     │   ├── stats.go                # Avg, Min, Max, Median, P95, Jitter (σ), Loss, Samples
-    │   ├── engine.go               # Warm-up + staggered worker pool benchmark coordinator
+    │   ├── engine.go               # Warm-up, live streaming pool, QuickVerify & summarizer
     │   ├── integrity.go            # DNSSEC, AdBlock sinkhole, and ISP Hijack probes
     │   ├── export.go               # JSON, CSV, and Markdown report exporters
     │   └── engine_test.go          # Automated unit & integration tests
-    └── sysnet/
-        ├── sysnet.go               # Cross-platform types & strict IP validation boundary
-        ├── exec_windows.go         # Hidden subprocess creation flags on Windows
-        ├── exec_unix.go            # POSIX locale normalization & /etc/resolv.conf reader
-        ├── net_windows.go          # Windows PowerShell/CIM + UAC implementation
-        ├── net_darwin.go           # macOS networksetup/scutil + osascript implementation
-        └── net_linux.go            # Linux nmcli/resolvectl + pkexec implementation
+    ├── sysnet/
+    │   ├── sysnet.go               # Cross-platform types & strict IP validation boundary
+    │   ├── exec_windows.go         # Hidden subprocess creation flags on Windows
+    │   ├── exec_unix.go            # POSIX locale normalization & /etc/resolv.conf reader
+    │   ├── net_windows.go          # Windows PowerShell/CIM + UAC implementation
+    │   ├── net_darwin.go           # macOS networksetup/scutil + osascript implementation
+    │   └── net_linux.go            # Linux nmcli/resolvectl + pkexec implementation
+    └── updater/
+        ├── updater.go              # GitHub Releases semver check & SHA-256 verification
+        ├── swap_windows.go         # Windows detached PowerShell binary swapper
+        ├── swap_unix.go            # macOS .app ditto swapper & Linux EXDEV-safe swapper
+        └── updater_test.go         # Release API, SHA-256 & swap helper tests
 ```
 
 ---

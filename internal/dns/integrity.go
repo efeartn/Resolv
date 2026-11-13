@@ -124,6 +124,10 @@ func checkIntegrity(ctx context.Context, servers []*serverState, results []*Serv
 			defer func() { <-sem }()
 
 			r := servers[i].resolver
+			if results[i].Status == "skipped" {
+				step("Skipped " + r.Name)
+				return
+			}
 			p := integrityProbe{}
 			if q, err := newQuerier(r, ProtoUDP, timeout, client); err == nil {
 				p.udp = q

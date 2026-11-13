@@ -146,3 +146,83 @@ func TestDoHAndExport(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeAndSkippedAndLiveProgress(t *testing.T) {
+	opts := Options{Queries: -1, TimeoutMs: 50, Protocols: []string{"invalid", "udp"}}
+	opts.Normalize()
+	if opts.Queries != DefaultOptions().Queries || opts.TimeoutMs != DefaultOptions().TimeoutMs {
+		t.Fatalf("Normalize did not restore invalid bounds: %+v", opts)
+	}
+	if len(opts.Protocols) != 1 || opts.Protocols[0] != "udp" {
+		t.Fatalf("Normalize unexpected protocols: %+v", opts.Protocols)
+	}
+
+	// UDP-only run on a DoH-only resolver should mark status="skipped", not "failed".
+	dohOnly := Resolver{ID: "dohonly", Name: "DoH Only", Category: CategoryPrivacy, Source: SourceBuiltin, DoH: "https://example.com/dns-query"}
+	rep := Run(context.Background(), []Resolver{dohOnly}, Options{Protocols: []string{"udp"}, Queries: 1, CheckIntegrity: false}, "1.1.0", nil)
+	if len(rep.Results) != 1 || rep.Results[0].Status != "skipped" {
+		t.Fatalf("expected skipped status for DoH-only resolver in UDP mode, got %+v", rep.Results)
+	}
+	if rep.Recommendation != nil {
+		t.Fatalf("expected nil recommendation when only skipped resolver ran, got %+v", rep.Recommendation)
+	}
+
+	// Verify local DoH mock benchmark emits Partial streaming snapshots and QuickVerify succeeds.
+	dohSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		q := new(mdns.Msg)
+		if err := q.Unpack(body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		resp := new(mdns.Msg)
+		resp.SetReply(q)
+		if len(q.Question) > 0 {
+			resp.Answer = append(resp.Answer, &mdns.A{
+				Hdr: mdns.RR_Header{Name: q.Question[0].Name, Rrtype: mdns.TypeA, Class: mdns.ClassINET, Ttl: 60},
+				A:   net.ParseIP("1.1.1.1"),
+			})
+		}
+		out, _ := resp.Pack()
+		w.Header().Set("Content-Type", "application/dns-message")
+		_, _ = w.Write(out)
+	}))
+	defer dohSrv.Close()
+
+	mockRes := Resolver{ID: "mockdoh", Name: "Mock DoH", Category: CategoryCustom, Source: SourceCustom, DoH: dohSrv.URL}
+	st := &serverState{
+		resolver: mockRes,
+		queriers: map[Protocol]querier{ProtoUDP: &dohQuerier{}},
+		samples:  map[Protocol]*sampleSet{ProtoUDP: {failures: map[string]int{}}},
+	}
+	pendingSnap := snapshotResults([]*serverState{st}, true)
+	if len(pendingSnap) != 1 || pendingSnap[0].Status != "pending" {
+		t.Fatalf("expected pending snapshot before samples complete, got %+v", pendingSnap[0])
+	}
+
+	var partialCount int
+	mockRep := Run(context.Background(), []Resolver{mockRes}, Options{
+		Protocols:      []string{"doh"},
+		Queries:        2,
+		Workers:        2,
+		StaggerMs:      0,
+		TimeoutMs:      1000,
+		CheckIntegrity: false,
+	}, "1.1.0", func(p Progress) {
+		if len(p.Partial) > 0 {
+			partialCount++
+		}
+	})
+	if partialCount == 0 || len(mockRep.Results) != 1 || mockRep.Results[0].Status != "ok" {
+		t.Fatalf("expected streaming partial snapshots and ok status, partialCount=%d results=%+v", partialCount, mockRep.Results)
+	}
+
+	qv := QuickVerify(context.Background(), mockRes, DefaultOptions())
+	if qv.Status != "ok" || qv.Overall.Sent != 4 || qv.Overall.Received != 4 {
+		t.Fatalf("QuickVerify unexpected result: %+v", qv)
+	}
+}

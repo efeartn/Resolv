@@ -6,8 +6,9 @@
 
   // Application UI State
   const state = {
+    version: '1.1.0',
     mode: 'simple',            // 'simple' | 'pro'
-    categoryFilter: 'all',     // 'all' | 'Privacy' | 'Ad-blocking' | 'Standard' | 'Family'
+    categoryFilter: 'all',     // 'all' | 'Privacy' | 'Ad-blocking' | 'Standard' | 'Family' | 'Custom'
     searchQuery: '',           // free-text filter
     sortBy: 'rank',            // 'rank' | 'avg' | 'p95' | 'cached' | 'uncached' | 'jitter'
     running: false,
@@ -15,6 +16,27 @@
     network: null,
     resolvers: [],
     report: null,
+    liveResults: null,         // Streaming partial results during benchmark
+    verifyResult: null,        // Latest QuickVerifyCurrentDNS measurement
+    updateInfo: null,          // Cached GitHub release check metadata
+    updating: false,
+    configDir: '',
+    settings: {
+      viewMode: 'simple',
+      categoryFilter: 'all',
+      sortBy: 'rank',
+      autoCheckUpdates: true,
+      options: {
+        queries: 10,
+        timeoutMs: 2000,
+        workers: 12,
+        staggerMs: 12,
+        protocols: ['udp', 'doh'],
+        cachedDomains: ['cloudflare.com', 'google.com', 'apple.com'],
+        uncachedBase: 'resbench.invalid',
+        checkIntegrity: true
+      }
+    },
     defaultOptions: {
       queries: 10,
       timeoutMs: 2000,
@@ -22,7 +44,7 @@
       staggerMs: 12,
       protocols: ['udp', 'doh'],
       cachedDomains: ['cloudflare.com', 'google.com', 'apple.com'],
-      uncachedBase: 'example.com',
+      uncachedBase: 'resbench.invalid',
       checkIntegrity: true
     },
     currentExportFormat: 'md'
@@ -70,6 +92,34 @@
     async FlushCache() {
       if (hasWails()) return window.go.main.App.FlushCache();
       return { success: true, message: 'OS DNS resolver cache flushed.' };
+    },
+    async QuickVerifyCurrentDNS() {
+      if (hasWails()) return window.go.main.App.QuickVerifyCurrentDNS();
+      return demoBridge.quickVerify();
+    },
+    async GetSettings() {
+      if (hasWails()) return window.go.main.App.GetSettings();
+      return demoBridge.getSettings();
+    },
+    async SaveSettings(s) {
+      if (hasWails()) return window.go.main.App.SaveSettings(s);
+      return demoBridge.saveSettings(s);
+    },
+    async GetHistory() {
+      if (hasWails()) return window.go.main.App.GetHistory();
+      return demoBridge.getHistory();
+    },
+    async ClearHistory() {
+      if (hasWails()) return window.go.main.App.ClearHistory();
+      return demoBridge.clearHistory();
+    },
+    async CheckForUpdates() {
+      if (hasWails()) return window.go.main.App.CheckForUpdates();
+      return demoBridge.checkForUpdates();
+    },
+    async DownloadAndApplyUpdate() {
+      if (hasWails()) return window.go.main.App.DownloadAndApplyUpdate();
+      return demoBridge.downloadAndApplyUpdate();
     },
     async ExportReport(format) {
       if (hasWails()) return window.go.main.App.ExportReport(format);
@@ -304,6 +354,28 @@
       ? net.systemDns.join(', ')
       : (active && active.dns && active.dns.length > 0 ? active.dns.join(', ') : 'None detected');
     $('currentDnsValue').textContent = sysDns;
+    renderVerifyBadge();
+  }
+
+  function renderVerifyBadge() {
+    const el = $('verifyResultBadge');
+    if (!el) return;
+    const v = state.verifyResult;
+    if (!v || !v.success) {
+      el.classList.add('hidden');
+      return;
+    }
+    const cls = latencyBadgeClass(v.avgMs);
+    let deltaText = '';
+    if (v.improvementPct && v.improvementPct >= 2) {
+      deltaText = ` (-${Math.round(v.improvementPct)}%)`;
+    } else if (v.improvementPct && v.improvementPct <= -5) {
+      deltaText = ` (+${Math.round(-v.improvementPct)}%)`;
+    }
+    el.className = `${cls} font-mono text-[10px] px-1.5 py-0.5 rounded`;
+    el.textContent = `${v.avgMs.toFixed(1)} ms${deltaText}`;
+    el.title = v.message || 'Verified live DNS speed';
+    el.classList.remove('hidden');
   }
 
   // Render Winner, KPI Telemetry Strip & Integrity Banners
@@ -324,7 +396,9 @@
     $('exportMenuBtn').disabled = false;
 
     // Populate KPI Telemetry Strip
-    const validResults = (report.results || []).filter((r) => r.status !== 'failed' && r.overall && r.overall.received > 0);
+    const validResults = (report.results || []).filter(
+      (r) => r.status !== 'failed' && r.status !== 'skipped' && r.status !== 'pending' && r.overall && r.overall.received > 0
+    );
     if (kpiEl && validResults.length > 0) {
       kpiEl.classList.remove('hidden');
       const byAvg = [...validResults].sort((a, b) => a.overall.avgMs - b.overall.avgMs)[0];
@@ -368,12 +442,13 @@
       $('winnerDetail').textContent = rec.detail || '';
       $('winnerApplyBtn').dataset.resolverId = rec.resolverId;
       $('winnerCopyBtn').dataset.resolverId = rec.resolverId;
+      $('winnerApplyBtn').classList.toggle('hidden', Boolean(rec.currentIsFastest));
     } else {
       winnerEl.classList.add('hidden');
     }
   }
 
-  // Build unified items list (either benchmarked results or pre-benchmark resolver list)
+  // Build unified items list (streaming partial results, finished report, or pre-benchmark resolver list)
   function getDisplayItems() {
     const cat = state.categoryFilter;
     const q = (state.searchQuery || '').toLowerCase().trim();
@@ -383,17 +458,24 @@
       return hay.includes(q);
     };
 
-    if (state.report && Array.isArray(state.report.results) && state.report.results.length > 0) {
-      const filtered = state.report.results.filter((r) => (cat === 'all' || r.resolver.category === cat) && matchesSearch(r.resolver));
+    const sourceResults = (state.running && Array.isArray(state.liveResults) && state.liveResults.length > 0)
+      ? state.liveResults
+      : (state.report && Array.isArray(state.report.results) && state.report.results.length > 0 ? state.report.results : null);
+
+    if (sourceResults) {
+      const filtered = sourceResults.filter((r) => (cat === 'all' || r.resolver.category === cat) && matchesSearch(r.resolver));
       const metric = (item) => {
-        if (!item.overall || item.status === 'failed') return 999999;
+        if (item.status === 'pending') return 999997;
+        if (item.status === 'failed') return 999998;
+        if (item.status === 'skipped') return 999999;
+        if (!item.overall || item.overall.received === 0) return 999997;
         switch (state.sortBy) {
           case 'avg': return item.overall.avgMs;
           case 'p95': return item.overall.p95Ms || item.overall.maxMs;
-          case 'cached': return item.cached && item.cached.received > 0 ? item.cached.avgMs : 999999;
-          case 'uncached': return item.uncached && item.uncached.received > 0 ? item.uncached.avgMs : 999999;
+          case 'cached': return item.cached && item.cached.received > 0 ? item.cached.avgMs : 999996;
+          case 'uncached': return item.uncached && item.uncached.received > 0 ? item.uncached.avgMs : 999996;
           case 'jitter': return item.overall.jitterMs;
-          default: return item.rank;
+          default: return item.rank || 999995;
         }
       };
       return [...filtered].sort((a, b) => metric(a) - metric(b));
@@ -415,19 +497,21 @@
       }));
   }
 
-  function renderResults() {
-    renderBanners();
+  function renderTablesOnly() {
     const items = getDisplayItems();
-
     let maxCeiling = 80;
     items.forEach((item) => {
       if (item.overall && item.overall.maxMs > maxCeiling) {
         maxCeiling = item.overall.maxMs;
       }
     });
-
     renderSimpleList(items, maxCeiling);
     renderProTable(items, maxCeiling);
+  }
+
+  function renderResults() {
+    renderBanners();
+    renderTablesOnly();
   }
 
   function renderSimpleList(items, maxCeiling) {
@@ -439,8 +523,9 @@
 
     container.innerHTML = items.map((item) => {
       const r = item.resolver;
-      const isPending = item.status === 'pending' || !item.overall;
+      const isSkipped = item.status === 'skipped';
       const isFailed = item.status === 'failed';
+      const isPending = item.status === 'pending' || (!isSkipped && !isFailed && (!item.overall || item.overall.received === 0));
       const avg = item.overall ? item.overall.avgMs : 0;
       const expanded = state.expandedIds.has(r.id);
       const endpoint = (r.ipv4 && r.ipv4.length > 0)
@@ -449,13 +534,13 @@
       const canApply = Array.isArray(r.ipv4) && r.ipv4.length > 0 && !r.deprecated;
 
       return `
-      <div class="resolver-card rounded-xl bg-[#121215] border border-zinc-800/90 overflow-hidden">
+      <div class="resolver-card rounded-xl bg-[#121215] border border-zinc-800/90 overflow-hidden ${isSkipped ? 'opacity-65' : ''}">
         <!-- Main Row -->
         <div class="px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 cursor-pointer" data-toggle-row="${escapeHTML(r.id)}">
           <!-- Left: Rank + Name + Badges -->
           <div class="flex items-center gap-3 min-w-0 md:w-[36%]">
             <div class="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center font-mono text-xs text-zinc-400 shrink-0">
-              ${isPending ? '·' : `#${item.rank}`}
+              ${isSkipped ? '—' : isPending ? '·' : `#${item.rank}`}
             </div>
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-1.5">
@@ -471,9 +556,9 @@
           <!-- Center: Pure SVG Min–Avg–P95–Max Range Bar + Sparkline -->
           <div class="flex-1 flex items-center gap-3">
             <div class="flex-1">
-              ${renderRangeBarSVG(item.overall, maxCeiling, 280, 22)}
+              ${renderRangeBarSVG(isSkipped || isPending || isFailed ? null : item.overall, maxCeiling, 280, 22)}
             </div>
-            ${!isPending && !isFailed && item.overall && item.overall.samples
+            ${!isPending && !isFailed && !isSkipped && item.overall && item.overall.samples
               ? `<div class="hidden sm:block shrink-0">${renderSparklineSVG(item.overall.samples, avg, 88, 22)}</div>`
               : ''
             }
@@ -481,11 +566,13 @@
 
           <!-- Right: Avg ms Badge + One-Click Actions -->
           <div class="flex items-center justify-end gap-2 shrink-0" onclick="event.stopPropagation()">
-            ${isPending
-              ? `<span class="badge-neutral text-xs font-mono px-2.5 py-1 rounded-md">Ready</span>`
-              : isFailed
-                ? `<span class="badge-rose text-xs font-mono px-2.5 py-1 rounded-md">Unreachable</span>`
-                : `<span class="${latencyBadgeClass(avg)} text-xs font-mono font-semibold px-2.5 py-1 rounded-md" title="P95: ${(item.overall.p95Ms || avg).toFixed(1)} ms">${avg.toFixed(1)} ms</span>`
+            ${isSkipped
+              ? `<span class="badge-neutral text-xs font-mono px-2.5 py-1 rounded-md" title="No endpoint matches selected transport protocols">Skipped</span>`
+              : isPending
+                ? `<span class="badge-neutral text-xs font-mono px-2.5 py-1 rounded-md">${state.running ? 'Testing…' : 'Ready'}</span>`
+                : isFailed
+                  ? `<span class="badge-rose text-xs font-mono px-2.5 py-1 rounded-md">Unreachable</span>`
+                  : `<span class="${latencyBadgeClass(avg)} text-xs font-mono font-semibold px-2.5 py-1 rounded-md" title="P95: ${(item.overall.p95Ms || avg).toFixed(1)} ms">${avg.toFixed(1)} ms</span>`
             }
 
             ${canApply
@@ -573,7 +660,9 @@
         </div>
       </div>
 
-      ${o ? `
+      ${item.status === 'skipped'
+        ? `<div class="mt-3 rounded-lg bg-zinc-900/60 border border-zinc-800 px-3 py-2 text-zinc-400 font-mono">Skipped in this test run — no endpoints match your currently enabled transport protocols (e.g., encrypted-only DoH/DoT resolver while testing UDP).</div>`
+        : (o && (o.sent > 0 || o.received > 0) ? `
       <div class="grid grid-cols-2 sm:grid-cols-6 gap-2.5 mt-3">
         <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 p-2.5">
           <div class="text-[10px] font-mono uppercase text-zinc-400">Cached Avg</div>
@@ -611,20 +700,56 @@
         ${protoCards}
       </div>
       ${findings}
-      ` : `<div class="mt-3 text-zinc-400 font-mono">Click “Run Speed Test” above to measure cached vs. uncached latency, P95, jitter, DNSSEC, ad-blocking, and ISP hijacking.</div>`}
+      ` : `<div class="mt-3 text-zinc-400 font-mono">Click “Run Speed Test” above to measure cached vs. uncached latency, P95, jitter, DNSSEC, ad-blocking, and ISP hijacking.</div>`)}
     `;
+  }
+
+  function detectProTableProtocols(items) {
+    const selected = Array.from(document.querySelectorAll('.proto-checkbox:checked')).map((el) => el.value);
+    const present = new Set(selected.length > 0 ? selected : ['udp', 'doh']);
+    present.add('udp');
+    present.add('doh');
+    items.forEach((item) => {
+      if (item && item.protocols) {
+        Object.keys(item.protocols).forEach((p) => present.add(p));
+      }
+    });
+    return ['udp', 'doh', 'dot', 'tcp'].filter((p) => present.has(p));
   }
 
   function renderProTable(items, maxCeiling) {
     const tbody = $('proTableBody');
+    const headRow = $('proTableHeadRow');
+    const activeProtos = detectProTableProtocols(items);
+    const protoTitles = { udp: 'UDP :53', doh: 'DoH', dot: 'DoT :853', tcp: 'TCP :53' };
+    if (headRow) {
+      headRow.innerHTML = `
+        <th class="py-3 px-3">#</th>
+        <th class="py-3 px-3">Resolver</th>
+        <th class="py-3 px-2.5 text-right">Avg (ms)</th>
+        <th class="py-3 px-2.5 text-right">P95</th>
+        <th class="py-3 px-3">Latency Sparkline &amp; Range (Min–Avg–Max)</th>
+        <th class="py-3 px-2.5 text-right">Cached</th>
+        <th class="py-3 px-2.5 text-right">Uncached</th>
+        <th class="py-3 px-2.5 text-right">Jitter (σ)</th>
+        <th class="py-3 px-2.5 text-right">Loss</th>
+        ${activeProtos.map((p) => `<th class="py-3 px-2.5 text-right">${protoTitles[p] || p.toUpperCase()}</th>`).join('')}
+        <th class="py-3 px-2.5">DNSSEC</th>
+        <th class="py-3 px-2.5">AdBlock</th>
+        <th class="py-3 px-2.5">Integrity</th>
+        <th class="py-3 px-3 text-right">Action</th>
+      `;
+    }
+
+    const colSpan = 13 + activeProtos.length;
     if (items.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="15" class="py-8 text-center text-zinc-400">No resolvers match the selected filter.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${colSpan}" class="py-8 text-center text-zinc-400">No resolvers match the selected filter.</td></tr>`;
       return;
     }
 
     const protoCell = (item, p) => {
       const pr = item.protocols && item.protocols[p];
-      if (!pr || !pr.combined) return '<span class="text-zinc-600">—</span>';
+      if (!pr || !pr.combined || pr.combined.sent === 0) return '<span class="text-zinc-600">—</span>';
       if (pr.combined.received === 0) return `<span class="text-rose-400">${escapeHTML(pr.error || 'err')}</span>`;
       return `${pr.combined.avgMs.toFixed(1)} ms`;
     };
@@ -632,14 +757,15 @@
     tbody.innerHTML = items.map((item) => {
       const r = item.resolver;
       const o = item.overall;
-      const isPending = item.status === 'pending' || !o;
+      const isSkipped = item.status === 'skipped';
       const isFailed = item.status === 'failed';
+      const isPending = item.status === 'pending' || (!isSkipped && !isFailed && (!o || o.received === 0));
       const canApply = Array.isArray(r.ipv4) && r.ipv4.length > 0 && !r.deprecated;
       const primaryAddr = (r.ipv4 && r.ipv4[0]) || r.doh || r.dot || '—';
 
       return `
-      <tr class="hover:bg-zinc-900/50 transition">
-        <td class="py-3 px-3 font-mono text-zinc-400">${isPending ? '·' : item.rank}</td>
+      <tr class="hover:bg-zinc-900/50 transition ${isSkipped ? 'opacity-65' : ''}">
+        <td class="py-3 px-3 font-mono text-zinc-400">${isSkipped ? '—' : isPending ? '·' : item.rank}</td>
         <td class="py-3 px-3">
           <div class="flex items-center gap-1.5">
             <span class="font-semibold text-zinc-100">${escapeHTML(r.name)}</span>
@@ -648,23 +774,22 @@
           <div class="font-mono text-[11px] text-zinc-400 truncate max-w-[190px]">${escapeHTML(primaryAddr)}</div>
         </td>
         <td class="py-3 px-2.5 text-right font-mono">
-          ${isPending ? '<span class="text-zinc-500">—</span>' : isFailed ? '<span class="badge-rose px-2 py-0.5 rounded">Failed</span>' : `<span class="${latencyBadgeClass(o.avgMs)} px-2 py-0.5 rounded font-semibold">${o.avgMs.toFixed(2)}</span>`}
+          ${isSkipped ? '<span class="badge-neutral px-2 py-0.5 rounded">Skipped</span>' : isPending ? `<span class="text-zinc-500">${state.running ? '…' : '—'}</span>` : isFailed ? '<span class="badge-rose px-2 py-0.5 rounded">Failed</span>' : `<span class="${latencyBadgeClass(o.avgMs)} px-2 py-0.5 rounded font-semibold">${o.avgMs.toFixed(2)}</span>`}
         </td>
         <td class="py-3 px-2.5 text-right font-mono text-zinc-300">
-          ${!isPending && !isFailed ? `${(o.p95Ms || o.maxMs).toFixed(1)}` : '—'}
+          ${!isPending && !isFailed && !isSkipped ? `${(o.p95Ms || o.maxMs).toFixed(1)}` : '—'}
         </td>
         <td class="py-3 px-3">
           <div class="flex items-center gap-2 min-w-[210px]">
-            <div class="flex-1">${renderRangeBarSVG(o, maxCeiling, 130, 20)}</div>
-            ${!isPending && !isFailed && o.samples ? renderSparklineSVG(o.samples, o.avgMs, 76, 20) : ''}
+            <div class="flex-1">${renderRangeBarSVG(isSkipped || isPending || isFailed ? null : o, maxCeiling, 130, 20)}</div>
+            ${!isPending && !isFailed && !isSkipped && o && o.samples ? renderSparklineSVG(o.samples, o.avgMs, 76, 20) : ''}
           </div>
         </td>
-        <td class="py-3 px-2.5 text-right font-mono text-emerald-300">${!isPending && item.cached && item.cached.received > 0 ? item.cached.avgMs.toFixed(2) : '—'}</td>
-        <td class="py-3 px-2.5 text-right font-mono text-cyan-300">${!isPending && item.uncached && item.uncached.received > 0 ? item.uncached.avgMs.toFixed(2) : '—'}</td>
-        <td class="py-3 px-2.5 text-right font-mono text-zinc-300">${!isPending && !isFailed ? `${o.jitterMs.toFixed(2)} ms` : '—'}</td>
-        <td class="py-3 px-2.5 text-right font-mono ${o && o.lossPct > 0 ? 'text-amber-300' : 'text-zinc-400'}">${!isPending ? `${o.lossPct.toFixed(0)}%` : '—'}</td>
-        <td class="py-3 px-2.5 text-right font-mono text-zinc-200">${protoCell(item, 'udp')}</td>
-        <td class="py-3 px-2.5 text-right font-mono text-zinc-200">${protoCell(item, 'doh')}</td>
+        <td class="py-3 px-2.5 text-right font-mono text-emerald-300">${!isPending && !isSkipped && item.cached && item.cached.received > 0 ? item.cached.avgMs.toFixed(2) : '—'}</td>
+        <td class="py-3 px-2.5 text-right font-mono text-cyan-300">${!isPending && !isSkipped && item.uncached && item.uncached.received > 0 ? item.uncached.avgMs.toFixed(2) : '—'}</td>
+        <td class="py-3 px-2.5 text-right font-mono text-zinc-300">${!isPending && !isFailed && !isSkipped ? `${o.jitterMs.toFixed(2)} ms` : '—'}</td>
+        <td class="py-3 px-2.5 text-right font-mono ${o && o.lossPct > 0 ? 'text-amber-300' : 'text-zinc-400'}">${!isPending && !isSkipped ? `${o.lossPct.toFixed(0)}%` : '—'}</td>
+        ${activeProtos.map((p) => `<td class="py-3 px-2.5 text-right font-mono text-zinc-200">${protoCell(item, p)}</td>`).join('')}
         <td class="py-3 px-2.5">${dnssecBadgeHTML(item.dnssec)}</td>
         <td class="py-3 px-2.5">${adBlockBadgeHTML(item.filtering)}</td>
         <td class="py-3 px-2.5">${hijackBadgeHTML(item.hijack)}</td>
@@ -689,19 +814,25 @@
     $('progressCount').textContent = `${done} / ${total}`;
     const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
     $('progressBar').style.width = `${pct}%`;
+
+    if (state.running && Array.isArray(p.partial) && p.partial.length > 0) {
+      state.liveResults = p.partial;
+      renderTablesOnly();
+    }
   }
 
-  // Gather Benchmark Options from UI
+  // Gather Benchmark Options from UI + Persisted Settings
   function collectOptions() {
     const protos = Array.from(document.querySelectorAll('.proto-checkbox:checked')).map((el) => el.value);
+    const uncachedBase = (state.settings && state.settings.options && state.settings.options.uncachedBase) || state.defaultOptions.uncachedBase || 'resbench.invalid';
     return {
       queries: Number($('optQueries').value) || 10,
       timeoutMs: Number($('optTimeout').value) || 2000,
-      workers: 12,
-      staggerMs: 12,
+      workers: (state.defaultOptions && state.defaultOptions.workers) || 12,
+      staggerMs: (state.defaultOptions && state.defaultOptions.staggerMs) || 12,
       protocols: protos.length > 0 ? protos : ['udp', 'doh'],
-      cachedDomains: ['cloudflare.com', 'google.com', 'apple.com'],
-      uncachedBase: 'example.com',
+      cachedDomains: (state.defaultOptions && state.defaultOptions.cachedDomains) || ['cloudflare.com', 'google.com', 'apple.com'],
+      uncachedBase,
       checkIntegrity: Boolean($('optIntegrity').checked)
     };
   }
@@ -714,6 +845,7 @@
       return;
     }
     state.running = true;
+    state.liveResults = null;
     $('runBenchmarkBtn').disabled = true;
     $('runBenchmarkBtn').classList.add('opacity-60');
     $('runBtnLabel').textContent = 'Testing DNS…';
@@ -724,6 +856,7 @@
     try {
       const opts = collectOptions();
       const report = await backend.RunBenchmark(opts);
+      state.liveResults = null;
       state.report = report;
       renderResults();
       if (report && report.cancelled) {
@@ -732,6 +865,7 @@
         showToast(`Benchmark completed in ${(report.durationMs / 1000).toFixed(1)}s across ${report.results.length} resolvers.`, 'success');
       }
     } catch (err) {
+      state.liveResults = null;
       showToast(`Benchmark failed: ${err.message || err}`, 'error');
     } finally {
       state.running = false;
@@ -740,6 +874,43 @@
       $('runBtnLabel').textContent = 'Run Speed Test';
       $('cancelBenchmarkBtn').classList.add('hidden');
       $('progressContainer').classList.add('hidden');
+    }
+  }
+
+  async function verifyCurrentDNS(options = { silentToast: false, prefixMessage: '' }) {
+    const btn = $('verifyDnsBtn');
+    const origText = btn ? btn.textContent : 'Verify Speed';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Verifying…';
+    }
+    try {
+      const vr = await backend.QuickVerifyCurrentDNS();
+      state.verifyResult = vr;
+      renderVerifyBadge();
+      if (vr && vr.success) {
+        const deltaStr = vr.improvementPct && vr.improvementPct >= 2
+          ? ` (${Math.round(vr.improvementPct)}% faster)`
+          : '';
+        if (options.prefixMessage) {
+          showToast(`${options.prefixMessage} Verified ${vr.avgMs.toFixed(1)} ms${deltaStr}.`, 'success');
+        } else if (!options.silentToast) {
+          showToast(vr.message, 'success');
+        }
+      } else if (!options.silentToast && vr && vr.message) {
+        showToast(vr.message, 'error');
+      }
+      return vr;
+    } catch (err) {
+      if (!options.silentToast) {
+        showToast(`Verification failed: ${err.message || err}`, 'error');
+      }
+      return null;
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = origText;
+      }
     }
   }
 
@@ -753,6 +924,12 @@
       }
       if (res.success) {
         showToast(res.message, 'success');
+        if (state.report && state.report.recommendation && state.report.recommendation.resolverId === resolverId) {
+          state.report.recommendation.currentIsFastest = true;
+          state.report.recommendation.headline = `You're now using ${state.report.recommendation.name} — the fastest resolver on your network`;
+          renderBanners();
+        }
+        verifyCurrentDNS({ prefixMessage: res.message });
       } else if (res.needsManual) {
         openManualFallbackModal(res);
       } else {
@@ -807,13 +984,322 @@
     $('manualFallbackModal').classList.remove('hidden');
   }
 
-  function setMode(mode) {
+  function setMode(mode, persist = true) {
     state.mode = mode === 'pro' ? 'pro' : 'simple';
     $('modeSimpleBtn').classList.toggle('active', state.mode === 'simple');
     $('modeProBtn').classList.toggle('active', state.mode === 'pro');
     $('simpleViewSection').classList.toggle('hidden', state.mode !== 'simple');
     $('proViewSection').classList.toggle('hidden', state.mode !== 'pro');
     $('proConfigBar').classList.toggle('hidden', state.mode !== 'pro');
+    if (persist) persistUiPreferences();
+  }
+
+  function applyCategoryFilterUI(cat) {
+    state.categoryFilter = cat || 'all';
+    document.querySelectorAll('#categoryFilterGroup .cat-chip').forEach((el) => {
+      const active = el.dataset.cat === state.categoryFilter;
+      el.className = active
+        ? 'cat-chip active px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-800 text-zinc-100 border border-zinc-700'
+        : 'cat-chip px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800';
+    });
+  }
+
+  function syncOptionsToProBar(opts) {
+    if (!opts) return;
+    const protos = new Set(opts.protocols || ['udp', 'doh']);
+    document.querySelectorAll('.proto-checkbox').forEach((cb) => {
+      cb.checked = protos.has(cb.value);
+    });
+    if ($('optQueries') && opts.queries) $('optQueries').value = String(opts.queries);
+    if ($('optTimeout') && opts.timeoutMs) $('optTimeout').value = String(opts.timeoutMs);
+    if ($('optIntegrity')) $('optIntegrity').checked = opts.checkIntegrity !== false;
+  }
+
+  async function persistUiPreferences() {
+    try {
+      const updated = {
+        ...state.settings,
+        viewMode: state.mode,
+        categoryFilter: state.categoryFilter,
+        sortBy: state.sortBy,
+        options: state.settings.options || state.defaultOptions
+      };
+      const saved = await backend.SaveSettings(updated);
+      if (saved) state.settings = saved;
+    } catch (_) {
+      // Non-fatal in preview or transient IO issues
+    }
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes || bytes <= 0) return '—';
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function updateNavPill() {
+    const btn = $('openUpdateModalBtn');
+    const dot = $('updateNavDot');
+    const icon = $('updateNavIcon');
+    const lbl = $('updateNavLabel');
+    if (!btn) return;
+
+    const info = state.updateInfo;
+    if (info && info.isAvailable) {
+      btn.classList.add('update-pill-available');
+      dot.classList.remove('hidden');
+      icon.classList.add('hidden');
+      lbl.textContent = `v${info.version} Ready`;
+      btn.title = `Resolv v${info.version} is available`;
+    } else {
+      btn.classList.remove('update-pill-available');
+      dot.classList.add('hidden');
+      icon.classList.remove('hidden');
+      lbl.textContent = 'Updates';
+      btn.title = 'Check for Resolv Software Updates';
+    }
+  }
+
+  function renderUpdateModal(errorMsg = '') {
+    const info = state.updateInfo;
+    $('updateCurrentVer').textContent = `v${state.version || '1.1.0'}`;
+    $('updateLatestVer').textContent = info && info.version ? `v${info.version}` : '—';
+
+    const badge = $('updateModalBadge');
+    const title = $('updateStatusTitle');
+    const meta = $('updateAssetMeta');
+    const noteBox = $('updateNoteBox');
+    const installBtn = $('installUpdateBtn');
+    const notesEl = $('updateReleaseNotes');
+    const linkEl = $('openReleasePageLink');
+
+    noteBox.classList.add('hidden');
+    if (errorMsg) {
+      badge.className = 'font-mono text-[10px] px-1.5 py-0.5 rounded bg-rose-950/70 border border-rose-800 text-rose-200';
+      badge.textContent = 'Error';
+      title.textContent = errorMsg;
+      installBtn.classList.add('hidden');
+      meta.classList.add('hidden');
+      return;
+    }
+
+    if (!info) {
+      badge.className = 'font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300';
+      badge.textContent = 'Idle';
+      title.textContent = 'Click Check Now to query GitHub Releases.';
+      notesEl.textContent = 'No changelog loaded yet.';
+      meta.classList.add('hidden');
+      installBtn.classList.add('hidden');
+      return;
+    }
+
+    if (info.htmlUrl) linkEl.href = info.htmlUrl;
+    notesEl.textContent = (info.body && info.body.trim()) || 'No changelog summary provided for this release.';
+
+    if (!info.isAvailable) {
+      badge.className = 'font-mono text-[10px] px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300';
+      badge.textContent = 'Up to date';
+      title.textContent = `You are running the latest version of Resolv (v${state.version}).`;
+      meta.classList.add('hidden');
+      installBtn.classList.add('hidden');
+      return;
+    }
+
+    badge.className = 'font-mono text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/50 text-emerald-300';
+    badge.textContent = info.assetReady ? 'Update Ready' : 'Release Found';
+    title.textContent = `${info.title || 'Resolv v' + info.version} is available!`;
+
+    if (info.assetName) {
+      meta.classList.remove('hidden');
+      $('updateAssetName').textContent = info.assetName;
+      $('updateAssetSize').textContent = formatBytes(info.assetSize);
+      $('updateAssetSha').textContent = info.sha256 ? `SHA-256 ${info.sha256.slice(0, 12)}…` : 'Checksum pending';
+    } else {
+      meta.classList.add('hidden');
+    }
+
+    if (info.updateNote) {
+      noteBox.textContent = info.updateNote;
+      noteBox.classList.remove('hidden');
+    }
+
+    const canAutoInstall = Boolean(info.assetReady && info.canSelfUpdate);
+    installBtn.classList.toggle('hidden', !canAutoInstall);
+  }
+
+  async function checkForUpdates({ silent = false } = {}) {
+    const checkBtn = $('checkUpdatesNowBtn');
+    if (checkBtn && !silent) {
+      checkBtn.disabled = true;
+      checkBtn.textContent = 'Checking…';
+      $('updateModalBadge').textContent = 'Checking';
+    }
+    try {
+      const info = await backend.CheckForUpdates();
+      state.updateInfo = info;
+      updateNavPill();
+      renderUpdateModal();
+      if (!silent && !info.isAvailable) {
+        showToast(`Resolv v${state.version} is already up to date.`, 'success');
+      }
+      return info;
+    } catch (err) {
+      if (!silent) {
+        renderUpdateModal(err.message || String(err));
+      }
+      return null;
+    } finally {
+      if (checkBtn && !silent) {
+        checkBtn.disabled = false;
+        checkBtn.textContent = 'Check Now';
+      }
+    }
+  }
+
+  function handleUpdateProgress(p) {
+    if (!p) return;
+    $('updateProgressBox').classList.remove('hidden');
+    $('updateProgressLabel').textContent = p.status || p.phase || 'Updating…';
+    const pct = Math.max(0, Math.min(100, Number(p.percent || 0)));
+    $('updateProgressPct').textContent = `${pct}%`;
+    $('updateProgressBar').style.width = `${pct}%`;
+  }
+
+  async function installUpdateNow() {
+    if (state.updating) return;
+    state.updating = true;
+    const installBtn = $('installUpdateBtn');
+    const checkBtn = $('checkUpdatesNowBtn');
+    installBtn.disabled = true;
+    installBtn.textContent = 'Updating…';
+    checkBtn.disabled = true;
+    $('updateProgressBox').classList.remove('hidden');
+    handleUpdateProgress({ phase: 'downloading', percent: 5, status: 'Starting verified download…' });
+
+    try {
+      const res = await backend.DownloadAndApplyUpdate();
+      if (res && res.success) {
+        showToast(res.message || 'Update verified — restarting Resolv…', 'success');
+        handleUpdateProgress({ phase: 'installing', percent: 100, status: res.message || 'Restarting Resolv…' });
+      } else {
+        const msg = (res && res.message) || 'Update installation could not complete.';
+        renderUpdateModal(msg);
+        showToast(msg, 'error');
+        $('updateProgressBox').classList.add('hidden');
+      }
+    } catch (err) {
+      const msg = err.message || String(err);
+      renderUpdateModal(msg);
+      showToast(`Update failed: ${msg}`, 'error');
+      $('updateProgressBox').classList.add('hidden');
+    } finally {
+      state.updating = false;
+      installBtn.disabled = false;
+      installBtn.textContent = 'Download & Restart';
+      checkBtn.disabled = false;
+    }
+  }
+
+  async function openHistoryModal() {
+    $('historyModal').classList.remove('hidden');
+    const container = $('historyListContainer');
+    container.innerHTML = '<div class="py-8 text-center text-zinc-400">Loading history…</div>';
+    try {
+      const entries = await backend.GetHistory();
+      renderHistoryList(entries || []);
+    } catch (err) {
+      container.innerHTML = `<div class="py-8 text-center text-rose-300">Failed to load history: ${escapeHTML(err.message || err)}</div>`;
+    }
+  }
+
+  function renderHistoryList(entries) {
+    const container = $('historyListContainer');
+    $('historyCountBadge').textContent = `${entries.length} run${entries.length === 1 ? '' : 's'}`;
+    if (!entries || entries.length === 0) {
+      container.innerHTML = `<div class="rounded-xl bg-zinc-900/50 border border-zinc-800 p-8 text-center text-zinc-400">No benchmark runs recorded yet. Run a Speed Test to save snapshots here.</div>`;
+      return;
+    }
+    container.innerHTML = entries.map((e) => {
+      const ts = e.timestamp ? new Date(e.timestamp).toLocaleString() : e.id;
+      const sysStr = Array.isArray(e.systemDns) && e.systemDns.length > 0 ? e.systemDns.join(', ') : 'Auto';
+      const top = Array.isArray(e.topResults) ? e.topResults : [];
+      const topHtml = top.map((row, idx) => `
+        <div class="flex items-center justify-between gap-2 text-[11px] font-mono">
+          <span class="text-zinc-300 truncate">${idx + 1}. ${escapeHTML(row.name)}</span>
+          <span class="${latencyBadgeClass(row.avgMs)} px-1.5 py-0.2 rounded">${Number(row.avgMs).toFixed(1)} ms</span>
+        </div>
+      `).join('');
+      const gainStr = e.improvementPct >= 2 ? `<span class="text-emerald-400 font-mono">+${Math.round(e.improvementPct)}% gain</span>` : '';
+      return `
+        <div class="rounded-xl bg-zinc-900/70 border border-zinc-800 p-3.5 space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div class="font-medium text-zinc-100">${escapeHTML(e.winnerName || 'No winner')} ${e.winnerAvgMs ? `<span class="font-mono text-emerald-400">(${Number(e.winnerAvgMs).toFixed(1)} ms)</span>` : ''}</div>
+              <div class="text-[11px] font-mono text-zinc-400">${escapeHTML(ts)} · ${escapeHTML(e.adapterName || 'Network')} · Sys: ${escapeHTML(sysStr)}</div>
+            </div>
+            <div class="flex items-center gap-2">
+              ${e.intercepted ? '<span class="badge-rose font-mono text-[10px] px-1.5 py-0.5 rounded">Hijacked Port 53</span>' : ''}
+              ${gainStr}
+              <span class="font-mono text-[10px] text-zinc-500">${((e.durationMs || 0) / 1000).toFixed(1)}s</span>
+            </div>
+          </div>
+          ${topHtml ? `<div class="pt-2 border-t border-zinc-800/80 grid grid-cols-1 sm:grid-cols-2 gap-1.5">${topHtml}</div>` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  function openSettingsModal() {
+    const s = state.settings || {};
+    const o = s.options || state.defaultOptions;
+    $('setAutoCheckUpdates').checked = s.autoCheckUpdates !== false;
+    const protos = new Set(o.protocols || ['udp', 'doh']);
+    document.querySelectorAll('[data-set-proto]').forEach((cb) => {
+      cb.checked = protos.has(cb.dataset.setProto);
+    });
+    $('setDefaultQueries').value = String(o.queries || 10);
+    $('setDefaultTimeout').value = String(o.timeoutMs || 2000);
+    $('setUncachedBase').value = o.uncachedBase || 'resbench.invalid';
+    $('setCheckIntegrity').checked = o.checkIntegrity !== false;
+    $('settingsConfigDir').textContent = state.configDir || 'OS User Config Directory / Resolv';
+    $('settingsModal').classList.remove('hidden');
+  }
+
+  async function saveSettingsForm() {
+    const protos = Array.from(document.querySelectorAll('[data-set-proto]:checked')).map((cb) => cb.dataset.setProto);
+    if (protos.length === 0) {
+      showToast('Select at least one default DNS protocol.', 'error');
+      return;
+    }
+    const payload = {
+      ...state.settings,
+      viewMode: state.mode,
+      categoryFilter: state.categoryFilter,
+      sortBy: state.sortBy,
+      autoCheckUpdates: Boolean($('setAutoCheckUpdates').checked),
+      options: {
+        ...(state.defaultOptions || {}),
+        queries: Number($('setDefaultQueries').value) || 10,
+        timeoutMs: Number($('setDefaultTimeout').value) || 2000,
+        protocols: protos,
+        uncachedBase: ($('setUncachedBase').value || 'resbench.invalid').trim(),
+        checkIntegrity: Boolean($('setCheckIntegrity').checked)
+      }
+    };
+    try {
+      const saved = await backend.SaveSettings(payload);
+      if (saved) {
+        state.settings = saved;
+        if (saved.options) {
+          state.defaultOptions = saved.options;
+          syncOptionsToProBar(saved.options);
+        }
+      }
+      $('settingsModal').classList.add('hidden');
+      showToast('Settings saved to persistent config.', 'success');
+    } catch (err) {
+      showToast(`Failed to save settings: ${err.message || err}`, 'error');
+    }
   }
 
   async function openExportModal(format) {
@@ -833,6 +1319,7 @@
   function bindEvents() {
     if (window.runtime && typeof window.runtime.EventsOn === 'function') {
       window.runtime.EventsOn('benchmark:progress', handleProgress);
+      window.runtime.EventsOn('update:progress', handleUpdateProgress);
     }
 
     window.addEventListener('online', () => renderNetwork());
@@ -850,6 +1337,7 @@
     if ($('sortSelect')) {
       $('sortSelect').addEventListener('change', (e) => {
         state.sortBy = e.target.value;
+        persistUiPreferences();
         renderResults();
       });
     }
@@ -859,7 +1347,10 @@
       const tag = (e.target && e.target.tagName) || '';
       const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
       if (e.key === 'Escape') {
-        document.querySelectorAll('[id$="Modal"]').forEach((m) => m.classList.add('hidden'));
+        document.querySelectorAll('[id$="Modal"]').forEach((m) => {
+          if (m.id === 'updateModal' && state.updating) return;
+          m.classList.add('hidden');
+        });
         $('exportDropdown').classList.add('hidden');
         if (inInput && e.target.id === 'searchResolverInput') {
           e.target.value = '';
@@ -879,6 +1370,15 @@
       }
     });
 
+    // Click backdrop to close modals
+    document.querySelectorAll('[id$="Modal"]').forEach((modal) => {
+      modal.addEventListener('click', (e) => {
+        if (e.target !== modal) return;
+        if (modal.id === 'updateModal' && state.updating) return;
+        modal.classList.add('hidden');
+      });
+    });
+
     $('runBenchmarkBtn').addEventListener('click', startBenchmark);
     $('cancelBenchmarkBtn').addEventListener('click', () => backend.CancelBenchmark());
 
@@ -892,9 +1392,14 @@
 
     $('interfaceSelect').addEventListener('change', async (e) => {
       if (!e.target.value) return;
+      state.report = null;
+      state.liveResults = null;
+      state.verifyResult = null;
       const b = await backend.SelectInterface(e.target.value);
       applyBootstrap(b);
     });
+
+    $('verifyDnsBtn').addEventListener('click', () => verifyCurrentDNS());
 
     $('resetDnsBtn').addEventListener('click', async () => {
       const res = await backend.ResetDNS();
@@ -902,7 +1407,16 @@
         state.network = res.network;
         renderNetwork();
       }
-      showToast(res.message, res.success ? 'success' : 'error');
+      if (res.success) {
+        showToast(res.message, 'success');
+        if (state.report && state.report.recommendation && state.report.recommendation.currentIsFastest) {
+          state.report.recommendation.currentIsFastest = false;
+          renderBanners();
+        }
+        verifyCurrentDNS({ prefixMessage: res.message });
+      } else {
+        showToast(res.message, 'error');
+      }
     });
 
     $('flushCacheBtn').addEventListener('click', async () => {
@@ -925,13 +1439,8 @@
     $('categoryFilterGroup').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-cat]');
       if (!btn) return;
-      state.categoryFilter = btn.dataset.cat;
-      document.querySelectorAll('#categoryFilterGroup .cat-chip').forEach((el) => {
-        const active = el.dataset.cat === state.categoryFilter;
-        el.className = active
-          ? 'cat-chip active px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-800 text-zinc-100 border border-zinc-700'
-          : 'cat-chip px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800';
-      });
+      applyCategoryFilterUI(btn.dataset.cat);
+      persistUiPreferences();
       renderResults();
     });
 
@@ -951,8 +1460,12 @@
       }
       const rmBtn = e.target.closest('[data-remove-custom]');
       if (rmBtn) {
-        const list = await backend.RemoveCustomResolver(rmBtn.dataset.removeCustom);
+        const rmId = rmBtn.dataset.removeCustom;
+        const list = await backend.RemoveCustomResolver(rmId);
         state.resolvers = list;
+        if (state.report && Array.isArray(state.report.results)) {
+          state.report.results = state.report.results.filter((item) => item.resolver.id !== rmId);
+        }
         renderResults();
         showToast('Custom resolver removed.', 'info');
         return;
@@ -971,9 +1484,32 @@
       $('customDnsModal').classList.remove('hidden');
     });
     $('openAboutModalBtn').addEventListener('click', () => $('aboutModal').classList.remove('hidden'));
+    $('openHistoryModalBtn').addEventListener('click', openHistoryModal);
+    $('openSettingsModalBtn').addEventListener('click', openSettingsModal);
+    $('openUpdateModalBtn').addEventListener('click', () => {
+      $('updateProgressBox').classList.add('hidden');
+      $('updateModal').classList.remove('hidden');
+      renderUpdateModal();
+      if (!state.updateInfo) {
+        checkForUpdates({ silent: false });
+      }
+    });
+
+    $('checkUpdatesNowBtn').addEventListener('click', () => checkForUpdates({ silent: false }));
+    $('installUpdateBtn').addEventListener('click', installUpdateNow);
+    $('saveSettingsBtn').addEventListener('click', saveSettingsForm);
+    $('clearHistoryBtn').addEventListener('click', async () => {
+      await backend.ClearHistory();
+      renderHistoryList([]);
+      showToast('Benchmark history cleared.', 'info');
+    });
 
     document.querySelectorAll('[data-close-modal]').forEach((btn) => {
-      btn.addEventListener('click', () => $(btn.dataset.closeModal).classList.add('hidden'));
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.closeModal;
+        if (id === 'updateModal' && state.updating) return;
+        $(id).classList.add('hidden');
+      });
     });
 
     $('customDnsForm').addEventListener('submit', async (e) => {
@@ -983,6 +1519,26 @@
       try {
         const resolvers = await backend.AddCustomResolver(name, input);
         state.resolvers = resolvers;
+        if (state.report && Array.isArray(state.report.results)) {
+          const existingIds = new Set(state.report.results.map((item) => item.resolver.id));
+          resolvers.forEach((r) => {
+            if (!existingIds.has(r.id)) {
+              state.report.results.push({
+                resolver: r,
+                rank: state.report.results.length + 1,
+                status: 'pending',
+                primary: '',
+                overall: null,
+                cached: null,
+                uncached: null,
+                protocols: {},
+                dnssec: 'unknown',
+                filtering: { checked: false, blocksAds: false },
+                hijack: { status: 'unknown' }
+              });
+            }
+          });
+        }
         $('customNameInput').value = '';
         $('customEndpointInput').value = '';
         $('customDnsModal').classList.add('hidden');
@@ -1023,14 +1579,32 @@
 
   function applyBootstrap(b) {
     if (!b) return;
-    $('appVersionBadge').textContent = `v${b.version || '1.0.0'}`;
+    state.version = b.version || '1.1.0';
+    state.configDir = b.configDir || '';
+    $('appVersionBadge').textContent = `v${state.version}`;
     if (b.network) {
       state.network = b.network;
-      $('aboutVersionArch').textContent = `v${b.version || '1.0.0'} · ${b.network.osName || b.network.os} (${b.network.arch || 'amd64'})`;
+      $('aboutVersionArch').textContent = `v${state.version} · ${b.network.osName || b.network.os} (${b.network.arch || 'amd64'})`;
     }
     if (Array.isArray(b.resolvers)) state.resolvers = b.resolvers;
-    if (b.defaultOptions) state.defaultOptions = b.defaultOptions;
-    if (b.lastReport) state.report = b.lastReport;
+    if (b.defaultOptions) {
+      state.defaultOptions = b.defaultOptions;
+      syncOptionsToProBar(b.defaultOptions);
+    }
+    if (b.settings) {
+      state.settings = b.settings;
+      if (b.settings.viewMode) setMode(b.settings.viewMode, false);
+      if (b.settings.categoryFilter) applyCategoryFilterUI(b.settings.categoryFilter);
+      if (b.settings.sortBy && $('sortSelect')) {
+        state.sortBy = b.settings.sortBy;
+        $('sortSelect').value = b.settings.sortBy;
+      }
+      if (b.settings.options) {
+        state.defaultOptions = b.settings.options;
+        syncOptionsToProBar(b.settings.options);
+      }
+    }
+    state.report = b.lastReport || null;
 
     renderNetwork();
     renderResults();
@@ -1039,6 +1613,23 @@
   // Standalone Browser Demo Bridge (only used when previewed outside Wails webview)
   const demoBridge = (() => {
     let cancelled = false;
+    let demoSettings = {
+      viewMode: 'simple',
+      categoryFilter: 'all',
+      sortBy: 'rank',
+      autoCheckUpdates: true,
+      options: {
+        queries: 10,
+        timeoutMs: 2000,
+        workers: 12,
+        staggerMs: 12,
+        protocols: ['udp', 'doh'],
+        cachedDomains: ['cloudflare.com', 'google.com', 'apple.com'],
+        uncachedBase: 'resbench.invalid',
+        checkIntegrity: true
+      }
+    };
+    let demoHistory = [];
     const demoNet = {
       os: 'windows',
       osName: 'Windows 11 Pro (Browser Preview)',
@@ -1067,19 +1658,64 @@
     let resolvers = [
       { id: 'system-dns', name: 'Current System DNS', category: 'System', source: 'system', description: 'Active DNS server configured on your OS.', ipv4: ['192.168.1.1'] },
       { id: 'cloudflare', name: 'Cloudflare', category: 'Privacy', source: 'builtin', description: 'Fast anycast resolver with a strict no-logging policy.', ipv4: ['1.1.1.1', '1.0.0.1'], doh: 'https://cloudflare-dns.com/dns-query', dot: 'one.one.one.one' },
+      { id: 'cloudflare-security', name: 'Cloudflare Malware', category: 'Privacy', source: 'builtin', description: 'Cloudflare 1.1.1.2 malware-blocking endpoint.', ipv4: ['1.1.1.2', '1.0.0.2'], doh: 'https://security.cloudflare-dns.com/dns-query', dot: 'security.cloudflare-dns.com' },
+      { id: 'cloudflare-family', name: 'Cloudflare Family', category: 'Family', source: 'builtin', description: 'Cloudflare 1.1.1.3 family-safe endpoint.', ipv4: ['1.1.1.3', '1.0.0.3'], doh: 'https://family.cloudflare-dns.com/dns-query', dot: 'family.cloudflare-dns.com' },
       { id: 'google', name: 'Google Public DNS', category: 'Standard', source: 'builtin', description: 'Large global anycast network operated by Google.', ipv4: ['8.8.8.8', '8.8.4.4'], doh: 'https://dns.google/dns-query', dot: 'dns.google' },
       { id: 'quad9', name: 'Quad9', category: 'Privacy', source: 'builtin', description: 'Non-profit resolver with malware-domain blocking and DNSSEC.', ipv4: ['9.9.9.9', '149.112.112.112'], doh: 'https://dns.quad9.net/dns-query', dot: 'dns.quad9.net' },
       { id: 'adguard', name: 'AdGuard DNS', category: 'Ad-blocking', source: 'builtin', description: 'Blocks ads, trackers and phishing at the DNS level.', ipv4: ['94.140.14.14', '94.140.15.15'], doh: 'https://dns.adguard-dns.com/dns-query', dot: 'dns.adguard-dns.com' },
+      { id: 'adguard-family', name: 'AdGuard Family', category: 'Family', source: 'builtin', description: 'Blocks ads and adult content.', ipv4: ['94.140.14.15', '94.140.15.16'], doh: 'https://family.adguard-dns.com/dns-query', dot: 'family.adguard-dns.com' },
       { id: 'nextdns', name: 'NextDNS', category: 'Privacy', source: 'builtin', description: 'Configurable privacy resolver.', ipv4: ['45.90.28.0', '45.90.30.0'], doh: 'https://dns.nextdns.io', dot: 'dns.nextdns.io' },
       { id: 'opendns', name: 'OpenDNS', category: 'Standard', source: 'builtin', description: 'Cisco Umbrella public resolver with phishing protection.', ipv4: ['208.67.222.222', '208.67.220.220'], doh: 'https://doh.opendns.com/dns-query', dot: 'dns.opendns.com' },
       { id: 'controld', name: 'Control D', category: 'Standard', source: 'builtin', description: 'Free unfiltered resolver by Control D.', ipv4: ['76.76.2.0', '76.76.10.0'], doh: 'https://freedns.controld.com/p0', dot: 'p0.freedns.controld.com' },
+      { id: 'controld-adblock', name: 'Control D AdBlock', category: 'Ad-blocking', source: 'builtin', description: 'Control D Free DNS filtering ads and trackers.', ipv4: ['76.76.2.2', '76.76.10.2'], doh: 'https://freedns.controld.com/p2', dot: 'p2.freedns.controld.com' },
       { id: 'cleanbrowsing', name: 'CleanBrowsing Family', category: 'Family', source: 'builtin', description: 'Family filter: blocks adult content and enforces SafeSearch.', ipv4: ['185.228.168.168', '185.228.169.168'], doh: 'https://doh.cleanbrowsing.org/doh/family-filter/', dot: 'family-filter-dns.cleanbrowsing.org' },
       { id: 'mullvad', name: 'Mullvad DNS', category: 'Privacy', source: 'builtin', description: 'Encrypted-only (DoH/DoT) resolver.', doh: 'https://dns.mullvad.net/dns-query', dot: 'dns.mullvad.net', deprecated: true }
     ];
 
+    const buildDemoResult = (r) => {
+      const bases = {
+        'cloudflare': 11.4, 'cloudflare-security': 12.1, 'cloudflare-family': 13.0,
+        'quad9': 16.8, 'google': 18.9, 'nextdns': 22.4, 'controld': 24.7, 'controld-adblock': 26.2,
+        'adguard': 29.5, 'adguard-family': 31.1, 'opendns': 34.2, 'system-dns': 41.6, 'cleanbrowsing': 48.3, 'mullvad': 64.1
+      };
+      const base = bases[r.id] || 31.0;
+      const cachedAvg = +(base * 0.68).toFixed(2);
+      const uncachedAvg = +(base * 1.32).toFixed(2);
+      const avg = +((cachedAvg + uncachedAvg) / 2).toFixed(2);
+      const jitter = +(base * 0.14).toFixed(2);
+      const minMs = +(cachedAvg * 0.82).toFixed(2);
+      const maxMs = +(uncachedAvg * 1.25).toFixed(2);
+      const p95Ms = +(uncachedAvg * 1.16).toFixed(2);
+      const samples = [
+        +(cachedAvg * 0.85).toFixed(2), +(uncachedAvg * 1.12).toFixed(2),
+        +(cachedAvg * 0.94).toFixed(2), +(uncachedAvg * 0.96).toFixed(2),
+        +(cachedAvg * 1.02).toFixed(2), +(uncachedAvg * 1.21).toFixed(2),
+        +(cachedAvg * 0.88).toFixed(2), +(uncachedAvg * 1.04).toFixed(2),
+        +(cachedAvg * 0.91).toFixed(2), +(uncachedAvg * 1.16).toFixed(2)
+      ];
+      const blocksAds = r.id === 'adguard' || r.id === 'controld-adblock';
+      return {
+        resolver: r,
+        rank: 0,
+        status: 'ok',
+        score: avg + jitter * 0.5,
+        primary: 'udp',
+        overall: { sent: 20, received: 20, avgMs: avg, minMs, maxMs, medianMs: avg, p95Ms, jitterMs: jitter, lossPct: 0, samples },
+        cached: { sent: 10, received: 10, avgMs: cachedAvg, minMs, maxMs: +(cachedAvg * 1.18).toFixed(2), medianMs: cachedAvg, p95Ms: +(cachedAvg * 1.14).toFixed(2), jitterMs: +(jitter * 0.7).toFixed(2), lossPct: 0 },
+        uncached: { sent: 10, received: 10, avgMs: uncachedAvg, minMs: +(uncachedAvg * 0.88).toFixed(2), maxMs, medianMs: uncachedAvg, p95Ms, jitterMs: jitter, lossPct: 0 },
+        protocols: {
+          udp: r.ipv4 ? { protocol: 'udp', endpoint: `${r.ipv4[0]}:53`, cached: { sent: 10, received: 10, avgMs: cachedAvg }, uncached: { sent: 10, received: 10, avgMs: uncachedAvg }, combined: { sent: 20, received: 20, avgMs: avg, p95Ms, maxMs, lossPct: 0, samples } } : undefined,
+          doh: r.doh ? { protocol: 'doh', endpoint: r.doh, cached: { sent: 10, received: 10, avgMs: +(cachedAvg * 1.09).toFixed(2) }, uncached: { sent: 10, received: 10, avgMs: +(uncachedAvg * 1.07).toFixed(2) }, combined: { sent: 20, received: 20, avgMs: +(avg * 1.08).toFixed(2), p95Ms: +(p95Ms * 1.08).toFixed(2), maxMs: +(maxMs * 1.08).toFixed(2), lossPct: 0, samples } } : undefined
+        },
+        dnssec: 'validating',
+        filtering: { checked: true, blocksAds, blockedCount: blocksAds ? 3 : 0, testedCount: 3, method: blocksAds ? 'sinkhole-ip' : 'none' },
+        hijack: { status: 'clean', udpEgress: '172.68.10.12', dohEgress: '172.68.10.19' }
+      };
+    };
+
     return {
-      getBootstrap: () => ({ version: '1.0.0', network: demoNet, resolvers }),
-      selectInterface: () => ({ version: '1.0.0', network: demoNet, resolvers }),
+      getBootstrap: () => ({ version: '1.1.0', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
+      selectInterface: () => ({ version: '1.1.0', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
       addCustomResolver(name, input) {
         if (!input) throw new Error('Enter an IPv4/IPv6 address or DoH URL');
         resolvers = [...resolvers, { id: 'custom-' + Date.now(), name: name || input, category: 'Custom', source: 'custom', ipv4: [input] }];
@@ -1089,54 +1725,65 @@
         resolvers = resolvers.filter((r) => r.id !== id);
         return resolvers;
       },
+      getSettings: () => demoSettings,
+      saveSettings: (s) => { demoSettings = s; return demoSettings; },
+      getHistory: () => demoHistory,
+      clearHistory: () => { demoHistory = []; },
+      quickVerify: () => ({
+        success: true,
+        resolverName: demoNet.systemDns.join(', '),
+        addresses: demoNet.systemDns,
+        avgMs: 11.4,
+        cachedAvgMs: 7.8,
+        uncachedAvgMs: 15.0,
+        p95Ms: 16.2,
+        lossPct: 0,
+        previousAvgMs: 41.6,
+        improvementPct: 72.6,
+        message: `Verified ${demoNet.systemDns.join(', ')}: 11.4 ms avg (cached 7.8 ms · uncached 15.0 ms · 0% loss)`
+      }),
+      checkForUpdates: () => ({
+        currentVersion: '1.1.0',
+        version: '1.1.0',
+        tagName: 'v1.1.0',
+        title: 'Resolv v1.1.0',
+        body: '- Auto-updater with SHA-256 verification\n- Live streaming benchmark results\n- Persistent settings and benchmark history',
+        htmlUrl: 'https://github.com/efeartn/Resolv/releases',
+        isAvailable: false,
+        assetReady: true,
+        canSelfUpdate: true
+      }),
+      downloadAndApplyUpdate: () => ({ success: false, message: 'Self-update requires the compiled desktop binary.' }),
       cancel() { cancelled = true; },
       async runBenchmark(opts, onProgress) {
         cancelled = false;
-        const bases = { 'cloudflare': 11.4, 'quad9': 16.8, 'google': 18.9, 'nextdns': 22.4, 'controld': 24.7, 'adguard': 29.5, 'opendns': 34.2, 'system-dns': 41.6, 'cleanbrowsing': 48.3, 'mullvad': 64.1 };
         const total = resolvers.length;
+        const built = [];
         for (let i = 0; i < total; i++) {
           if (cancelled) break;
-          onProgress({ phase: 'benchmark', done: i + 1, total, message: `Querying ${resolvers[i].name} over UDP & DoH` });
-          await new Promise((r) => setTimeout(r, 75));
-        }
-        const results = resolvers.map((r) => {
-          const base = bases[r.id] || 31.0;
-          const cachedAvg = +(base * 0.68).toFixed(2);
-          const uncachedAvg = +(base * 1.32).toFixed(2);
-          const avg = +((cachedAvg + uncachedAvg) / 2).toFixed(2);
-          const jitter = +(base * 0.14).toFixed(2);
-          const minMs = +(cachedAvg * 0.82).toFixed(2);
-          const maxMs = +(uncachedAvg * 1.25).toFixed(2);
-          const p95Ms = +(uncachedAvg * 1.16).toFixed(2);
-          const samples = [
-            +(cachedAvg * 0.85).toFixed(2), +(uncachedAvg * 1.12).toFixed(2),
-            +(cachedAvg * 0.94).toFixed(2), +(uncachedAvg * 0.96).toFixed(2),
-            +(cachedAvg * 1.02).toFixed(2), +(uncachedAvg * 1.21).toFixed(2),
-            +(cachedAvg * 0.88).toFixed(2), +(uncachedAvg * 1.04).toFixed(2),
-            +(cachedAvg * 0.91).toFixed(2), +(uncachedAvg * 1.16).toFixed(2)
+          built.push(buildDemoResult(resolvers[i]));
+          const partial = [
+            ...built.sort((a, b) => a.score - b.score).map((item, idx) => ({ ...item, rank: idx + 1 })),
+            ...resolvers.slice(i + 1).map((r, idx) => ({ resolver: r, rank: built.length + idx + 1, status: 'pending', overall: null, protocols: {} }))
           ];
-          const blocksAds = r.id === 'adguard';
-          return {
-            resolver: r,
-            rank: 0,
-            status: 'ok',
-            score: avg + jitter * 0.5,
-            primary: 'udp',
-            overall: { sent: 20, received: 20, avgMs: avg, minMs, maxMs, medianMs: avg, p95Ms, jitterMs: jitter, lossPct: 0, samples },
-            cached: { sent: 10, received: 10, avgMs: cachedAvg, minMs, maxMs: +(cachedAvg * 1.18).toFixed(2), medianMs: cachedAvg, p95Ms: +(cachedAvg * 1.14).toFixed(2), jitterMs: +(jitter * 0.7).toFixed(2), lossPct: 0 },
-            uncached: { sent: 10, received: 10, avgMs: uncachedAvg, minMs: +(uncachedAvg * 0.88).toFixed(2), maxMs, medianMs: uncachedAvg, p95Ms, jitterMs: jitter, lossPct: 0 },
-            protocols: {
-              udp: r.ipv4 ? { protocol: 'udp', endpoint: `${r.ipv4[0]}:53`, cached: { received: 10, avgMs: cachedAvg }, uncached: { received: 10, avgMs: uncachedAvg }, combined: { received: 20, avgMs: avg, p95Ms, maxMs, lossPct: 0, samples } } : undefined,
-              doh: r.doh ? { protocol: 'doh', endpoint: r.doh, cached: { received: 10, avgMs: +(cachedAvg * 1.09).toFixed(2) }, uncached: { received: 10, avgMs: +(uncachedAvg * 1.07).toFixed(2) }, combined: { received: 20, avgMs: +(avg * 1.08).toFixed(2), p95Ms: +(p95Ms * 1.08).toFixed(2), maxMs: +(maxMs * 1.08).toFixed(2), lossPct: 0, samples } } : undefined
-            },
-            dnssec: 'validating',
-            filtering: { checked: true, blocksAds, blockedCount: blocksAds ? 3 : 0, testedCount: 3, method: blocksAds ? 'sinkhole-ip' : 'none' },
-            hijack: { status: 'clean', udpEgress: '172.68.10.12', dohEgress: '172.68.10.19' }
-          };
-        }).sort((a, b) => a.score - b.score).map((item, idx) => ({ ...item, rank: idx + 1 }));
-
+          onProgress({ phase: 'benchmark', done: i + 1, total, message: `Querying ${resolvers[i].name}`, partial });
+          await new Promise((r) => setTimeout(r, 70));
+        }
+        const results = resolvers.map(buildDemoResult).sort((a, b) => a.score - b.score).map((item, idx) => ({ ...item, rank: idx + 1 }));
+        demoHistory.unshift({
+          id: String(Date.now()),
+          timestamp: new Date().toISOString(),
+          adapterName: 'Wi-Fi',
+          systemDns: demoNet.systemDns,
+          durationMs: 1420,
+          winnerName: 'Cloudflare',
+          winnerAvgMs: 11.4,
+          improvementPct: 72.6,
+          intercepted: false,
+          topResults: results.slice(0, 5).map((r) => ({ name: r.resolver.name, category: r.resolver.category, avgMs: r.overall.avgMs, p95Ms: r.overall.p95Ms, jitterMs: r.overall.jitterMs, lossPct: r.overall.lossPct }))
+        });
         return {
-          version: '1.0.0',
+          version: '1.1.0',
           durationMs: 1420,
           options: opts,
           results,
@@ -1182,6 +1829,9 @@
     try {
       const b = await backend.GetBootstrap();
       applyBootstrap(b);
+      if (state.settings && state.settings.autoCheckUpdates !== false) {
+        setTimeout(() => checkForUpdates({ silent: true }), 1200);
+      }
     } catch (err) {
       showToast(`Initialization warning: ${err.message || err}`, 'error');
     }

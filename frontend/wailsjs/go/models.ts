@@ -1,3 +1,120 @@
+export namespace config {
+	
+	export class HistoryRow {
+	    name: string;
+	    category: string;
+	    avgMs: number;
+	    p95Ms: number;
+	    jitterMs: number;
+	    lossPct: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.category = source["category"];
+	        this.avgMs = source["avgMs"];
+	        this.p95Ms = source["p95Ms"];
+	        this.jitterMs = source["jitterMs"];
+	        this.lossPct = source["lossPct"];
+	    }
+	}
+	export class HistoryEntry {
+	    id: string;
+	    timestamp: any;
+	    adapterName: string;
+	    systemDns?: string[];
+	    durationMs: number;
+	    winnerId?: string;
+	    winnerName?: string;
+	    winnerAvgMs?: number;
+	    currentAvgMs?: number;
+	    improvementPct?: number;
+	    intercepted: boolean;
+	    topResults: HistoryRow[];
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.timestamp = source["timestamp"];
+	        this.adapterName = source["adapterName"];
+	        this.systemDns = source["systemDns"];
+	        this.durationMs = source["durationMs"];
+	        this.winnerId = source["winnerId"];
+	        this.winnerName = source["winnerName"];
+	        this.winnerAvgMs = source["winnerAvgMs"];
+	        this.currentAvgMs = source["currentAvgMs"];
+	        this.improvementPct = source["improvementPct"];
+	        this.intercepted = source["intercepted"];
+	        this.topResults = this.convertValues(source["topResults"], HistoryRow);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Settings {
+	    viewMode: string;
+	    categoryFilter: string;
+	    sortBy: string;
+	    options: dns.Options;
+	    autoCheckUpdates: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Settings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.viewMode = source["viewMode"];
+	        this.categoryFilter = source["categoryFilter"];
+	        this.sortBy = source["sortBy"];
+	        this.options = this.convertValues(source["options"], dns.Options);
+	        this.autoCheckUpdates = source["autoCheckUpdates"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace dns {
 	
 	export class FilteringResult {
@@ -367,9 +484,11 @@ export namespace main {
 	    version: string;
 	    repoUrl: string;
 	    license: string;
+	    configDir?: string;
 	    network?: sysnet.Info;
 	    resolvers: dns.Resolver[];
 	    defaultOptions: dns.Options;
+	    settings: config.Settings;
 	    lastReport?: dns.Report;
 	
 	    static createFrom(source: any = {}) {
@@ -381,9 +500,11 @@ export namespace main {
 	        this.version = source["version"];
 	        this.repoUrl = source["repoUrl"];
 	        this.license = source["license"];
+	        this.configDir = source["configDir"];
 	        this.network = this.convertValues(source["network"], sysnet.Info);
 	        this.resolvers = this.convertValues(source["resolvers"], dns.Resolver);
 	        this.defaultOptions = this.convertValues(source["defaultOptions"], dns.Options);
+	        this.settings = this.convertValues(source["settings"], config.Settings);
 	        this.lastReport = this.convertValues(source["lastReport"], dns.Report);
 	    }
 	
@@ -404,6 +525,83 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class VerifyResult {
+	    success: boolean;
+	    message: string;
+	    resolverName: string;
+	    addresses?: string[];
+	    avgMs: number;
+	    cachedAvgMs: number;
+	    uncachedAvgMs: number;
+	    p95Ms: number;
+	    lossPct: number;
+	    previousAvgMs?: number;
+	    improvementPct?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new VerifyResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.message = source["message"];
+	        this.resolverName = source["resolverName"];
+	        this.addresses = source["addresses"];
+	        this.avgMs = source["avgMs"];
+	        this.cachedAvgMs = source["cachedAvgMs"];
+	        this.uncachedAvgMs = source["uncachedAvgMs"];
+	        this.p95Ms = source["p95Ms"];
+	        this.lossPct = source["lossPct"];
+	        this.previousAvgMs = source["previousAvgMs"];
+	        this.improvementPct = source["improvementPct"];
+	    }
+	}
+
+}
+
+export namespace updater {
+	
+	export class ReleaseInfo {
+	    currentVersion: string;
+	    version: string;
+	    tagName: string;
+	    title: string;
+	    body: string;
+	    publishedAt: string;
+	    htmlUrl: string;
+	    assetUrl?: string;
+	    assetName?: string;
+	    assetSize?: number;
+	    sha256?: string;
+	    isAvailable: boolean;
+	    assetReady: boolean;
+	    canSelfUpdate: boolean;
+	    updateNote?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReleaseInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.currentVersion = source["currentVersion"];
+	        this.version = source["version"];
+	        this.tagName = source["tagName"];
+	        this.title = source["title"];
+	        this.body = source["body"];
+	        this.publishedAt = source["publishedAt"];
+	        this.htmlUrl = source["htmlUrl"];
+	        this.assetUrl = source["assetUrl"];
+	        this.assetName = source["assetName"];
+	        this.assetSize = source["assetSize"];
+	        this.sha256 = source["sha256"];
+	        this.isAvailable = source["isAvailable"];
+	        this.assetReady = source["assetReady"];
+	        this.canSelfUpdate = source["canSelfUpdate"];
+	        this.updateNote = source["updateNote"];
+	    }
 	}
 
 }

@@ -26,46 +26,56 @@
 
   <!-- Top Navigation Bar -->
   <header class="sticky top-0 z-30 border-b border-zinc-800/80 bg-[#09090b]/95 backdrop-blur-md">
-    <div class="max-w-7xl mx-auto px-5 h-14 flex items-center justify-between gap-4">
+    <div class="max-w-7xl mx-auto px-4 sm:px-5 h-14 flex items-center justify-between gap-2 sm:gap-3">
       <!-- Brand Identity -->
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2.5 shrink-0">
         <img src="icon.svg" alt="Resolv" class="w-8 h-8 rounded-lg border border-zinc-800" />
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5 sm:gap-2">
           <span class="font-semibold tracking-tight text-zinc-100 text-[15px]">Resolv</span>
-          <span id="appVersionBadge" class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">v1.0.0</span>
+          <span id="appVersionBadge" class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">v1.1.0</span>
           <span id="elevatedBadge" class="hidden text-[11px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300" title="Running with Administrator / Root privileges">Admin</span>
           <span id="offlineBadge" class="hidden text-[11px] font-mono px-1.5 py-0.5 rounded bg-rose-950/80 border border-rose-800 text-rose-300" title="No active network route detected">Offline</span>
         </div>
       </div>
 
       <!-- Progressive Disclosure Mode Switcher & Actions -->
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5 sm:gap-2">
         <div class="inline-flex items-center p-0.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs" role="tablist" aria-label="Interface Mode">
           <button id="modeSimpleBtn" type="button" data-mode="simple"
-            class="mode-tab active px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-            Simple View
+            class="mode-tab active px-2.5 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 whitespace-nowrap">
+            <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            <span>Simple View</span>
           </button>
           <button id="modeProBtn" type="button" data-mode="pro"
-            class="mode-tab px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 text-zinc-400 hover:text-zinc-200">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/></svg>
-            Pro / Nerd Telemetry
+            class="mode-tab px-2.5 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 text-zinc-400 hover:text-zinc-200 whitespace-nowrap">
+            <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/></svg>
+            <span>Pro Telemetry</span>
           </button>
         </div>
 
         <!-- Custom DNS Button -->
         <button id="openCustomModalBtn" type="button"
-          class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800 text-xs font-medium text-zinc-200 transition flex items-center gap-1.5">
-          <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-          <span>Custom DNS</span>
+          class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800 text-xs font-medium text-zinc-200 transition flex items-center gap-1.5 whitespace-nowrap"
+          title="Add Custom DNS Resolver">
+          <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          <span class="hidden md:inline">Custom DNS</span>
+          <span class="md:hidden">Custom</span>
+        </button>
+
+        <!-- Benchmark History Trigger -->
+        <button id="openHistoryModalBtn" type="button"
+          class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800 text-xs font-medium text-zinc-200 transition flex items-center gap-1.5 whitespace-nowrap"
+          title="View Saved Benchmark History">
+          <svg class="w-3.5 h-3.5 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+          <span class="hidden lg:inline">History</span>
         </button>
 
         <!-- Export Dropdown Trigger -->
         <div class="relative">
           <button id="exportMenuBtn" type="button" disabled
-            class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800/90 disabled:opacity-40 disabled:pointer-events-none border border-zinc-800 text-xs font-medium text-zinc-200 transition flex items-center gap-1.5">
-            <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Export</span>
+            class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800/90 disabled:opacity-40 disabled:pointer-events-none border border-zinc-800 text-xs font-medium text-zinc-200 transition flex items-center gap-1.5 whitespace-nowrap">
+            <svg class="w-3.5 h-3.5 text-cyan-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span class="hidden lg:inline">Export</span>
           </button>
           <div id="exportDropdown" class="hidden absolute right-0 mt-1.5 w-48 rounded-xl bg-zinc-900 border border-zinc-800 shadow-2xl py-1 z-40 text-xs">
             <div class="px-3 py-1.5 text-[11px] font-mono uppercase tracking-wider text-zinc-500 border-b border-zinc-800/80">Export Report As</div>
@@ -80,6 +90,22 @@
             </button>
           </div>
         </div>
+
+        <!-- Check for Updates Pill -->
+        <button id="openUpdateModalBtn" type="button"
+          class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800 text-xs font-medium text-zinc-300 transition flex items-center gap-1.5 whitespace-nowrap"
+          title="Check for Resolv Software Updates">
+          <span id="updateNavDot" class="hidden w-2 h-2 rounded-full bg-emerald-400 update-dot-pulse shrink-0"></span>
+          <svg id="updateNavIcon" class="w-3.5 h-3.5 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+          <span id="updateNavLabel">Updates</span>
+        </button>
+
+        <!-- Settings Modal Trigger -->
+        <button id="openSettingsModalBtn" type="button"
+          class="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition"
+          title="Preferences &amp; Persistent Defaults">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
 
         <!-- About & GPLv3 License Modal Trigger -->
         <button id="openAboutModalBtn" type="button"
@@ -139,18 +165,25 @@
 
           <!-- Current DNS Card -->
           <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 px-3.5 py-2.5">
-            <div class="flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+            <div class="flex items-center justify-between gap-2 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
               <span>Current System DNS</span>
-              <span id="dnsModeBadge" class="font-mono text-[10px] px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300">Auto</span>
+              <div class="flex items-center gap-1.5">
+                <span id="verifyResultBadge" class="hidden font-mono text-[10px] px-1.5 py-0.5 rounded"></span>
+                <span id="dnsModeBadge" class="font-mono text-[10px] px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300">Auto</span>
+              </div>
             </div>
             <div id="currentDnsValue" class="mt-1 text-sm font-mono font-semibold text-emerald-400 truncate">—</div>
-            <div class="mt-1 flex items-center gap-3 text-[11px]">
+            <div class="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px]">
+              <button id="verifyDnsBtn" type="button" class="text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline transition">
+                Verify Speed
+              </button>
+              <span class="text-zinc-700">·</span>
               <button id="resetDnsBtn" type="button" class="text-zinc-400 hover:text-zinc-100 underline-offset-2 hover:underline transition">
                 Reset to DHCP
               </button>
               <span class="text-zinc-700">·</span>
               <button id="flushCacheBtn" type="button" class="text-zinc-400 hover:text-zinc-100 underline-offset-2 hover:underline transition">
-                Flush DNS Cache
+                Flush Cache
               </button>
             </div>
           </div>
@@ -320,6 +353,7 @@
         <button type="button" data-cat="Ad-blocking" class="cat-chip px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800">Ad-blocking</button>
         <button type="button" data-cat="Standard" class="cat-chip px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800">Standard</button>
         <button type="button" data-cat="Family" class="cat-chip px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800">Family</button>
+        <button type="button" data-cat="Custom" class="cat-chip px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800">Custom</button>
       </div>
 
       <!-- Quick Search, Sort & Latency Legend -->
@@ -355,7 +389,7 @@
         <div class="overflow-x-auto">
           <table class="w-full text-left border-collapse text-xs">
             <thead>
-              <tr class="border-b border-zinc-800 bg-zinc-900/70 font-mono text-[11px] uppercase tracking-wider text-zinc-400">
+              <tr id="proTableHeadRow" class="border-b border-zinc-800 bg-zinc-900/70 font-mono text-[11px] uppercase tracking-wider text-zinc-400">
                 <th class="py-3 px-3">#</th>
                 <th class="py-3 px-3">Resolver</th>
                 <th class="py-3 px-2.5 text-right">Avg (ms)</th>
@@ -488,7 +522,7 @@
           <img src="icon.svg" alt="Resolv" class="w-9 h-9 rounded-xl border border-zinc-800" />
           <div>
             <h3 class="text-sm font-semibold text-zinc-100">Resolv</h3>
-            <p id="aboutVersionArch" class="font-mono text-[11px] text-zinc-400">v1.0.0 · Cross-Platform Wails v2 Desktop App</p>
+            <p id="aboutVersionArch" class="font-mono text-[11px] text-zinc-400">v1.1.0 · Cross-Platform Wails v2 Desktop App</p>
           </div>
         </div>
         <button type="button" data-close-modal="aboutModal" class="text-zinc-400 hover:text-zinc-200">✕</button>
@@ -518,6 +552,208 @@
       <div class="mt-5 flex justify-end">
         <button type="button" data-close-modal="aboutModal"
           class="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-medium">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 5: Software Update & SHA-256 Self-Updater -->
+  <div id="updateModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-lg rounded-2xl bg-[#121215] border border-zinc-800 shadow-2xl p-5 text-xs flex flex-col max-h-[85vh]">
+      <div class="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+              <span>Software Update</span>
+              <span id="updateModalBadge" class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">Ready</span>
+            </h3>
+            <p id="updateStatusSubtitle" class="text-[11px] text-zinc-400">Signed release check via GitHub Releases &amp; SHA-256 manifest</p>
+          </div>
+        </div>
+        <button type="button" data-close-modal="updateModal" class="text-zinc-400 hover:text-zinc-200">✕</button>
+      </div>
+
+      <div class="mt-4 grid grid-cols-2 gap-2.5 shrink-0">
+        <div class="rounded-lg bg-zinc-900/80 border border-zinc-800 px-3 py-2">
+          <div class="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Installed Version</div>
+          <div id="updateCurrentVer" class="mt-0.5 font-mono text-sm font-semibold text-zinc-200">v1.1.0</div>
+        </div>
+        <div class="rounded-lg bg-zinc-900/80 border border-zinc-800 px-3 py-2">
+          <div class="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Latest on GitHub</div>
+          <div id="updateLatestVer" class="mt-0.5 font-mono text-sm font-semibold text-emerald-400">—</div>
+        </div>
+      </div>
+
+      <div id="updateStatusTitle" class="mt-3 text-xs font-medium text-zinc-200 shrink-0">Click Check Now to query GitHub Releases.</div>
+
+      <div id="updateAssetMeta" class="hidden mt-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800 px-3 py-2 font-mono text-[11px] text-zinc-400 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <span id="updateAssetName" class="text-zinc-200 truncate">—</span>
+        <div class="flex items-center gap-2">
+          <span id="updateAssetSize">—</span>
+          <span class="text-zinc-700">·</span>
+          <span id="updateAssetSha" class="text-emerald-400">SHA-256 —</span>
+        </div>
+      </div>
+
+      <div class="mt-3 flex-1 min-h-[120px] flex flex-col overflow-hidden">
+        <div class="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5">Release Notes</div>
+        <pre id="updateReleaseNotes" class="flex-1 overflow-y-auto rounded-lg bg-zinc-950 border border-zinc-800 p-3 font-sans text-[12px] text-zinc-300 whitespace-pre-wrap leading-relaxed select-text">No changelog loaded yet.</pre>
+      </div>
+
+      <div id="updateNoteBox" class="hidden mt-3 rounded-lg bg-amber-950/40 border border-amber-800/60 px-3 py-2 text-[11px] text-amber-200 leading-relaxed shrink-0"></div>
+
+      <div id="updateProgressBox" class="hidden mt-3 rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2.5 shrink-0">
+        <div class="flex items-center justify-between text-[11px] font-mono mb-1.5">
+          <span id="updateProgressLabel" class="text-emerald-300 truncate">Downloading...</span>
+          <span id="updateProgressPct" class="text-zinc-300">0%</span>
+        </div>
+        <div class="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
+          <div id="updateProgressBar" class="h-full bg-emerald-400 transition-all duration-150" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div class="flex items-center gap-2">
+          <button id="checkUpdatesNowBtn" type="button"
+            class="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium transition">
+            Check Now
+          </button>
+          <a id="openReleasePageLink" href="https://github.com/efeartn/Resolv/releases" target="_blank" rel="noreferrer"
+            class="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition">
+            GitHub Releases
+          </a>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" data-close-modal="updateModal"
+            class="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300">Close</button>
+          <button id="installUpdateBtn" type="button"
+            class="hidden px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold transition">
+            Download &amp; Restart
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 6: Saved Benchmark History -->
+  <div id="historyModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-2xl rounded-2xl bg-[#121215] border border-zinc-800 shadow-2xl p-5 text-xs flex flex-col max-h-[85vh]">
+      <div class="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
+        <div class="flex items-center gap-2">
+          <h3 class="text-sm font-semibold text-zinc-100">Benchmark History</h3>
+          <span id="historyCountBadge" class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">0 runs</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="clearHistoryBtn" type="button"
+            class="px-2.5 py-1 rounded-md bg-zinc-900 hover:bg-rose-950/60 border border-zinc-800 hover:border-rose-800/70 text-[11px] text-zinc-400 hover:text-rose-200 transition">
+            Clear History
+          </button>
+          <button type="button" data-close-modal="historyModal" class="text-zinc-400 hover:text-zinc-200 pl-1">✕</button>
+        </div>
+      </div>
+
+      <p class="mt-2.5 text-[11px] text-zinc-400 shrink-0">
+        Stored locally in your OS config folder so results persist across app upgrades. Compare performance across Wi-Fi networks, VPNs, or ISPs.
+      </p>
+
+      <div id="historyListContainer" class="mt-3 flex-1 overflow-y-auto space-y-2.5 pr-1"></div>
+
+      <div class="mt-4 pt-3 border-t border-zinc-800 flex justify-end shrink-0">
+        <button type="button" data-close-modal="historyModal"
+          class="px-4 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-medium">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 7: Preferences & Persistent Benchmark Defaults -->
+  <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-lg rounded-2xl bg-[#121215] border border-zinc-800 shadow-2xl p-5 text-xs">
+      <div class="flex items-center justify-between pb-3 border-b border-zinc-800">
+        <div>
+          <h3 class="text-sm font-semibold text-zinc-100">Settings &amp; Persistence</h3>
+          <p class="text-[11px] text-zinc-400">Saved outside the app binary so updates never reset your configuration</p>
+        </div>
+        <button type="button" data-close-modal="settingsModal" class="text-zinc-400 hover:text-zinc-200">✕</button>
+      </div>
+
+      <div class="mt-4 space-y-4">
+        <label class="flex items-center justify-between gap-3 rounded-lg bg-zinc-900/70 border border-zinc-800 px-3.5 py-2.5 cursor-pointer">
+          <div>
+            <div class="font-medium text-zinc-200">Check for updates on startup</div>
+            <div class="text-[11px] text-zinc-400">Quietly highlights the Updates pill when a new version is published</div>
+          </div>
+          <input id="setAutoCheckUpdates" type="checkbox" checked class="accent-emerald-500 w-4 h-4 shrink-0" />
+        </label>
+
+        <div>
+          <label class="block text-zinc-400 mb-1.5">Default Protocols Tested</label>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <label class="flex items-center gap-2 rounded-lg bg-zinc-900 border border-zinc-800 px-2.5 py-2 cursor-pointer">
+              <input type="checkbox" data-set-proto="udp" class="accent-emerald-500" />
+              <span class="font-mono text-zinc-200">UDP :53</span>
+            </label>
+            <label class="flex items-center gap-2 rounded-lg bg-zinc-900 border border-zinc-800 px-2.5 py-2 cursor-pointer">
+              <input type="checkbox" data-set-proto="doh" class="accent-emerald-500" />
+              <span class="font-mono text-zinc-200">DoH</span>
+            </label>
+            <label class="flex items-center gap-2 rounded-lg bg-zinc-900 border border-zinc-800 px-2.5 py-2 cursor-pointer">
+              <input type="checkbox" data-set-proto="dot" class="accent-emerald-500" />
+              <span class="font-mono text-zinc-200">DoT :853</span>
+            </label>
+            <label class="flex items-center gap-2 rounded-lg bg-zinc-900 border border-zinc-800 px-2.5 py-2 cursor-pointer">
+              <input type="checkbox" data-set-proto="tcp" class="accent-emerald-500" />
+              <span class="font-mono text-zinc-200">TCP :53</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="setDefaultQueries" class="block text-zinc-400 mb-1">Queries per Protocol</label>
+            <select id="setDefaultQueries" class="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-zinc-100 focus:outline-none focus:border-emerald-500">
+              <option value="5">5 (Fast)</option>
+              <option value="10">10 (Balanced)</option>
+              <option value="20">20 (Thorough)</option>
+            </select>
+          </div>
+          <div>
+            <label for="setDefaultTimeout" class="block text-zinc-400 mb-1">Query Timeout (ms)</label>
+            <select id="setDefaultTimeout" class="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-zinc-100 focus:outline-none focus:border-emerald-500">
+              <option value="1200">1200 ms</option>
+              <option value="2000">2000 ms</option>
+              <option value="3500">3500 ms</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label for="setUncachedBase" class="block text-zinc-400 mb-1">Uncached Test Base Domain</label>
+          <input id="setUncachedBase" type="text" placeholder="resbench.invalid"
+            class="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 font-mono text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500" />
+          <p class="mt-1 text-[11px] text-zinc-500">Queries random UUID subdomains under this zone to measure uncached upstream resolution.</p>
+        </div>
+
+        <label class="flex items-center justify-between gap-3 rounded-lg bg-zinc-900/70 border border-zinc-800 px-3.5 py-2.5 cursor-pointer">
+          <div>
+            <div class="font-medium text-zinc-200">Run DNSSEC, AdBlock &amp; Hijack probes</div>
+            <div class="text-[11px] text-zinc-400">Recommended for detecting ISP DNS interception and validation status</div>
+          </div>
+          <input id="setCheckIntegrity" type="checkbox" checked class="accent-emerald-500 w-4 h-4 shrink-0" />
+        </label>
+
+        <div class="rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 font-mono text-[11px] text-zinc-400">
+          <div class="text-[10px] uppercase tracking-wider text-zinc-500">Config &amp; History Storage Path</div>
+          <div id="settingsConfigDir" class="mt-0.5 text-zinc-300 truncate select-text">—</div>
+        </div>
+      </div>
+
+      <div class="mt-5 flex justify-end gap-2">
+        <button type="button" data-close-modal="settingsModal"
+          class="px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300">Cancel</button>
+        <button id="saveSettingsBtn" type="button"
+          class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold">Save Settings</button>
       </div>
     </div>
   </div>

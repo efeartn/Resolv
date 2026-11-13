@@ -18,6 +18,18 @@ export function CancelBenchmark() {
   return window['go']['main']['App']['CancelBenchmark']();
 }
 
+export function CheckForUpdates() {
+  return window['go']['main']['App']['CheckForUpdates']();
+}
+
+export function ClearHistory() {
+  return window['go']['main']['App']['ClearHistory']();
+}
+
+export function DownloadAndApplyUpdate() {
+  return window['go']['main']['App']['DownloadAndApplyUpdate']();
+}
+
 export function ExportReport(arg1) {
   return window['go']['main']['App']['ExportReport'](arg1);
 }
@@ -28,6 +40,18 @@ export function FlushCache() {
 
 export function GetBootstrap() {
   return window['go']['main']['App']['GetBootstrap']();
+}
+
+export function GetHistory() {
+  return window['go']['main']['App']['GetHistory']();
+}
+
+export function GetSettings() {
+  return window['go']['main']['App']['GetSettings']();
+}
+
+export function QuickVerifyCurrentDNS() {
+  return window['go']['main']['App']['QuickVerifyCurrentDNS']();
 }
 
 export function RefreshNetwork() {
@@ -48,6 +72,10 @@ export function RunBenchmark(arg1) {
 
 export function SaveReport(arg1) {
   return window['go']['main']['App']['SaveReport'](arg1);
+}
+
+export function SaveSettings(arg1) {
+  return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
 export function SelectInterface(arg1) {

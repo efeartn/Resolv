@@ -97,3 +97,29 @@ body {
 .select-all {
   user-select: all;
 }
+
+.select-text {
+  user-select: text;
+}
+
+/* Quiet Glowing Badge for Available Software Updates */
+.update-pill-available {
+  border-color: rgba(16, 185, 129, 0.55) !important;
+  background-color: rgba(6, 78, 59, 0.35) !important;
+  color: #a7f3d0 !important;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.18);
+  transition: box-shadow 180ms ease, border-color 180ms ease, background-color 180ms ease;
+}
+
+.update-pill-available:hover {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.32);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.85); }
+}
+
+.update-dot-pulse {
+  animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

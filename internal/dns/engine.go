@@ -46,7 +46,8 @@ func DefaultOptions() Options {
 	}
 }
 
-func (o *Options) normalize() {
+// Normalize clamps out-of-range option values to safe defaults.
+func (o *Options) Normalize() {
 	d := DefaultOptions()
 	if o.Queries <= 0 {
 		o.Queries = d.Queries
@@ -111,7 +112,7 @@ type ProtocolResult struct {
 type ServerResult struct {
 	Resolver  Resolver                     `json:"resolver"`
 	Rank      int                          `json:"rank"`
-	Status    string                       `json:"status"` // ok | degraded | failed
+	Status    string                       `json:"status"` // ok | degraded | failed | skipped | pending
 	Score     float64                      `json:"score"`
 	Primary   Protocol                     `json:"primary"`
 	Overall   Stats                        `json:"overall"`
@@ -150,10 +151,11 @@ type Report struct {
 
 // Progress is emitted while a benchmark runs.
 type Progress struct {
-	Phase   string `json:"phase"` // warmup | benchmark | integrity | done
-	Done    int    `json:"done"`
-	Total   int    `json:"total"`
-	Message string `json:"message"`
+	Phase   string          `json:"phase"` // warmup | benchmark | integrity | done
+	Done    int             `json:"done"`
+	Total   int             `json:"total"`
+	Message string          `json:"message"`
+	Partial []*ServerResult `json:"partial,omitempty"`
 }
 
 // ProgressFunc receives progress updates. It must be safe for concurrent use.
@@ -190,7 +192,7 @@ type serverState struct {
 // Run benchmarks the given resolvers. It always returns a report; if ctx is
 // cancelled the report contains whatever was measured so far.
 func Run(ctx context.Context, resolvers []Resolver, opts Options, version string, progress ProgressFunc) *Report {
-	opts.normalize()
+	opts.Normalize()
 	if progress == nil {
 		progress = func(Progress) {}
 	}
@@ -240,7 +242,7 @@ func Run(ctx context.Context, resolvers []Resolver, opts Options, version string
 	// Phase 3: integrity (DNSSEC + hijack detection).
 	results := make([]*ServerResult, len(servers))
 	for i, s := range servers {
-		results[i] = s.summarise()
+		results[i] = s.summarise(false)
 	}
 	if opts.CheckIntegrity && ctx.Err() == nil {
 		report.Network = checkIntegrity(ctx, servers, results, opts, progress)
@@ -318,6 +320,16 @@ func runJobs(ctx context.Context, servers []*serverState, jobs []job, opts Optio
 		return
 	}
 	var done int64
+	var lastSnapshotMs atomic.Int64
+	lastSnapshotMs.Store(time.Now().UnixMilli())
+	progress(Progress{
+		Phase:   "benchmark",
+		Done:    0,
+		Total:   total,
+		Message: "Starting benchmark queries...",
+		Partial: snapshotResults(servers, true),
+	})
+
 	ch := make(chan job)
 	var wg sync.WaitGroup
 
@@ -372,9 +384,18 @@ func runJobs(ctx context.Context, servers []*serverState, jobs []job, opts Optio
 			s.mu.Unlock()
 
 			n := atomic.AddInt64(&done, 1)
+			var partial []*ServerResult
+			nowMs := time.Now().UnixMilli()
+			prevMs := lastSnapshotMs.Load()
+			if int(n) == total || (nowMs-prevMs >= 220 && lastSnapshotMs.CompareAndSwap(prevMs, nowMs)) {
+				partial = snapshotResults(servers, true)
+			}
 			progress(Progress{
-				Phase: "benchmark", Done: int(n), Total: total,
+				Phase:   "benchmark",
+				Done:    int(n),
+				Total:   total,
 				Message: fmt.Sprintf("Querying %s over %s", s.resolver.Name, strings.ToUpper(string(j.proto))),
+				Partial: partial,
 			})
 		}
 	}
@@ -421,7 +442,16 @@ func newQuery(name string, qtype uint16, dnssec bool) *mdns.Msg {
 	return m
 }
 
-func (s *serverState) summarise() *ServerResult {
+func snapshotResults(servers []*serverState, pendingAllowed bool) []*ServerResult {
+	out := make([]*ServerResult, len(servers))
+	for i, s := range servers {
+		out[i] = s.summarise(pendingAllowed)
+	}
+	rank(out)
+	return out
+}
+
+func (s *serverState) summarise(pendingAllowed bool) *ServerResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -431,6 +461,7 @@ func (s *serverState) summarise() *ServerResult {
 		DNSSEC:    "unknown",
 		Hijack:    HijackResult{Status: HijackUnknown},
 	}
+	totalSent := 0
 	for _, p := range AllProtocols {
 		set, ok := s.samples[p]
 		if !ok {
@@ -443,13 +474,27 @@ func (s *serverState) summarise() *ServerResult {
 			Uncached: computeStats(set.uncached, set.sentUncached),
 			Combined: computeStats(set.all, set.sentCached+set.sentUncached),
 		}
+		totalSent += pr.Combined.Sent
 		if len(set.failures) > 0 {
-			pr.Failures = set.failures
+			clonedFailures := make(map[string]int, len(set.failures))
+			for k, v := range set.failures {
+				clonedFailures[k] = v
+			}
+			pr.Failures = clonedFailures
 		}
 		if !pr.Combined.Valid() && pr.Combined.Sent > 0 {
-			pr.Error = dominantFailure(set.failures)
+			pr.Error = dominantFailure(pr.Failures)
 		}
 		res.Protocols[p] = pr
+	}
+
+	if len(res.Protocols) == 0 {
+		res.Status = "skipped"
+		return res
+	}
+	if pendingAllowed && totalSent == 0 {
+		res.Status = "pending"
+		return res
 	}
 
 	// Primary protocol: plain UDP when it works (what the OS will use),
@@ -462,7 +507,11 @@ func (s *serverState) summarise() *ServerResult {
 		}
 	}
 	if res.Primary == "" {
-		res.Status = "failed"
+		if pendingAllowed {
+			res.Status = "pending"
+		} else {
+			res.Status = "failed"
+		}
 		for _, p := range []Protocol{ProtoUDP, ProtoDoH, ProtoDoT, ProtoTCP} {
 			if pr, ok := res.Protocols[p]; ok {
 				res.Primary = p
@@ -507,13 +556,13 @@ func dominantFailure(f map[string]int) string {
 }
 
 func rank(results []*ServerResult) {
-	order := map[string]int{"ok": 0, "degraded": 1, "failed": 2}
+	order := map[string]int{"ok": 0, "degraded": 1, "pending": 2, "failed": 3, "skipped": 4}
 	sort.SliceStable(results, func(i, j int) bool {
 		a, b := results[i], results[j]
 		if order[a.Status] != order[b.Status] {
 			return order[a.Status] < order[b.Status]
 		}
-		if a.Status == "failed" {
+		if a.Status == "failed" || a.Status == "skipped" || a.Status == "pending" {
 			return a.Resolver.Name < b.Resolver.Name
 		}
 		return a.Score < b.Score
@@ -526,7 +575,7 @@ func rank(results []*ServerResult) {
 func recommend(results []*ServerResult) *Recommendation {
 	var best, current *ServerResult
 	for _, r := range results {
-		if r.Status == "failed" {
+		if r.Status != "ok" && r.Status != "degraded" {
 			continue
 		}
 		if current == nil && r.Resolver.Source == SourceSystem {
@@ -582,4 +631,67 @@ func sameAddress(a, b Resolver) bool {
 		}
 	}
 	return false
+}
+
+// QuickVerify runs a fast 2-cached + 2-uncached live latency check against a single resolver.
+func QuickVerify(ctx context.Context, r Resolver, opts Options) *ServerResult {
+	opts.Normalize()
+	timeout := opts.timeout()
+	if timeout > 2500*time.Millisecond {
+		timeout = 2500 * time.Millisecond
+	}
+
+	var protos []Protocol
+	if r.PrimaryAddr() != "" {
+		protos = append(protos, ProtoUDP)
+	}
+	if r.DoH != "" && len(protos) == 0 {
+		protos = append(protos, ProtoDoH)
+	}
+	if len(protos) == 0 {
+		for _, ps := range opts.Protocols {
+			protos = append(protos, Protocol(ps))
+		}
+	}
+
+	dohTransport := newDoHTransport(timeout)
+	defer dohTransport.CloseIdleConnections()
+	dohClient := &http.Client{Transport: dohTransport, Timeout: timeout}
+
+	st := &serverState{
+		resolver: r,
+		queriers: map[Protocol]querier{},
+		errs:     map[Protocol]string{},
+		samples:  map[Protocol]*sampleSet{},
+	}
+	var protoStrings []string
+	for _, p := range protos {
+		q, err := newQuerier(r, p, timeout, dohClient)
+		if err != nil {
+			continue
+		}
+		st.queriers[p] = q
+		st.samples[p] = &sampleSet{failures: map[string]int{}}
+		protoStrings = append(protoStrings, string(p))
+	}
+	defer func() {
+		for _, q := range st.queriers {
+			q.close()
+		}
+	}()
+
+	quickOpts := opts
+	quickOpts.Queries = 2
+	quickOpts.Workers = 4
+	quickOpts.StaggerMs = 0
+	quickOpts.Protocols = protoStrings
+
+	servers := []*serverState{st}
+	warmup(ctx, servers, quickOpts, func(Progress) {})
+	jobs := buildJobs(servers, quickOpts)
+	runJobs(ctx, servers, jobs, quickOpts, func(Progress) {})
+
+	res := st.summarise(false)
+	res.Rank = 1
+	return res
 }

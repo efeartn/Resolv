@@ -89,6 +89,20 @@ var builtin = []Resolver{
 		DoH:         "https://cloudflare-dns.com/dns-query", DoT: "one.one.one.one",
 	},
 	{
+		ID: "cloudflare-security", Name: "Cloudflare Malware", Category: CategoryPrivacy, Source: SourceBuiltin,
+		Description: "Cloudflare 1.1.1.2 endpoint that blocks known malware and phishing domains.",
+		IPv4:        []string{"1.1.1.2", "1.0.0.2"},
+		IPv6:        []string{"2606:4700:4700::1112", "2606:4700:4700::1002"},
+		DoH:         "https://security.cloudflare-dns.com/dns-query", DoT: "security.cloudflare-dns.com",
+	},
+	{
+		ID: "cloudflare-family", Name: "Cloudflare Family", Category: CategoryFamily, Source: SourceBuiltin,
+		Description: "Cloudflare 1.1.1.3 endpoint blocking both malware and adult content.",
+		IPv4:        []string{"1.1.1.3", "1.0.0.3"},
+		IPv6:        []string{"2606:4700:4700::1113", "2606:4700:4700::1003"},
+		DoH:         "https://family.cloudflare-dns.com/dns-query", DoT: "family.cloudflare-dns.com",
+	},
+	{
 		ID: "google", Name: "Google Public DNS", Category: CategoryStandard, Source: SourceBuiltin,
 		Description: "Large global anycast network operated by Google.",
 		IPv4:        []string{"8.8.8.8", "8.8.4.4"},
@@ -110,6 +124,13 @@ var builtin = []Resolver{
 		DoH:         "https://dns.adguard-dns.com/dns-query", DoT: "dns.adguard-dns.com",
 	},
 	{
+		ID: "adguard-family", Name: "AdGuard Family", Category: CategoryFamily, Source: SourceBuiltin,
+		Description: "Blocks ads, trackers, adult content and enforces SafeSearch.",
+		IPv4:        []string{"94.140.14.15", "94.140.15.16"},
+		IPv6:        []string{"2a10:50c0::bad1:ff", "2a10:50c0::bad2:ff"},
+		DoH:         "https://family.adguard-dns.com/dns-query", DoT: "family.adguard-dns.com",
+	},
+	{
 		ID: "nextdns", Name: "NextDNS", Category: CategoryPrivacy, Source: SourceBuiltin,
 		Description: "Configurable privacy resolver (default, unconfigured profile).",
 		IPv4:        []string{"45.90.28.0", "45.90.30.0"},
@@ -129,6 +150,13 @@ var builtin = []Resolver{
 		IPv4:        []string{"76.76.2.0", "76.76.10.0"},
 		IPv6:        []string{"2606:1a40::", "2606:1a40:1::"},
 		DoH:         "https://freedns.controld.com/p0", DoT: "p0.freedns.controld.com",
+	},
+	{
+		ID: "controld-adblock", Name: "Control D AdBlock", Category: CategoryAdBlock, Source: SourceBuiltin,
+		Description: "Control D Free DNS filtering ads, trackers and malware.",
+		IPv4:        []string{"76.76.2.2", "76.76.10.2"},
+		IPv6:        []string{"2606:1a40::2", "2606:1a40:1::2"},
+		DoH:         "https://freedns.controld.com/p2", DoT: "p2.freedns.controld.com",
 	},
 	{
 		ID: "cleanbrowsing", Name: "CleanBrowsing Family", Category: CategoryFamily, Source: SourceBuiltin,

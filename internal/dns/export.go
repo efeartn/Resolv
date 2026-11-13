@@ -91,8 +91,8 @@ func exportMarkdown(r *Report) string {
 			addr = s.Resolver.DoH
 		}
 		avg := ff(s.Overall.Avg)
-		if s.Status == "failed" {
-			avg = "failed"
+		if s.Status == "failed" || s.Status == "skipped" || s.Status == "pending" {
+			avg = s.Status
 		}
 		adBlock := "No"
 		if s.Filtering.BlocksAds {

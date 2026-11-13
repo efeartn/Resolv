@@ -5,36 +5,55 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"resolv/internal/config"
 	"resolv/internal/dns"
 	"resolv/internal/sysnet"
+	"resolv/internal/updater"
 )
 
 const (
-	AppVersion = "1.0.1"
+	AppVersion = "1.1.0"
+	AppRepo    = "efeartn/Resolv"
 	AppRepoURL = "https://github.com/efeartn/Resolv"
 	AppLicense = "GNU General Public License v3.0 or later (GPL-3.0-or-later)"
 )
 
 // Bootstrap bundles everything the frontend needs on initial load or network refresh.
 type Bootstrap struct {
-	Version        string         `json:"version"`
-	RepoURL        string         `json:"repoUrl"`
-	License        string         `json:"license"`
-	Network        *sysnet.Info   `json:"network"`
-	Resolvers      []dns.Resolver `json:"resolvers"`
-	DefaultOptions dns.Options    `json:"defaultOptions"`
-	LastReport     *dns.Report    `json:"lastReport,omitempty"`
+	Version        string          `json:"version"`
+	RepoURL        string          `json:"repoUrl"`
+	License        string          `json:"license"`
+	ConfigDir      string          `json:"configDir,omitempty"`
+	Network        *sysnet.Info    `json:"network"`
+	Resolvers      []dns.Resolver  `json:"resolvers"`
+	DefaultOptions dns.Options     `json:"defaultOptions"`
+	Settings       config.Settings `json:"settings"`
+	LastReport     *dns.Report     `json:"lastReport,omitempty"`
+}
+
+// VerifyResult summarises a fast live latency probe against the current active system DNS.
+type VerifyResult struct {
+	Success        bool     `json:"success"`
+	Message        string   `json:"message"`
+	ResolverName   string   `json:"resolverName"`
+	Addresses      []string `json:"addresses,omitempty"`
+	AvgMs          float64  `json:"avgMs"`
+	CachedAvgMs    float64  `json:"cachedAvgMs"`
+	UncachedAvgMs  float64  `json:"uncachedAvgMs"`
+	P95Ms          float64  `json:"p95Ms"`
+	LossPct        float64  `json:"lossPct"`
+	PreviousAvgMs  float64  `json:"previousAvgMs,omitempty"`
+	ImprovementPct float64  `json:"improvementPct,omitempty"`
 }
 
 // ActionResult is returned by DNS mutation operations (Apply, Reset, Flush).
@@ -52,18 +71,28 @@ type ActionResult struct {
 
 // App is the Wails v2 backend controller bound to the frontend.
 type App struct {
-	ctx        context.Context
-	mu         sync.Mutex
-	netInfo    *sysnet.Info
-	custom     []dns.Resolver
-	lastReport *dns.Report
-	cancelRun  context.CancelFunc
+	ctx           context.Context
+	mu            sync.Mutex
+	netInfo       *sysnet.Info
+	custom        []dns.Resolver
+	settings      config.Settings
+	lastReport    *dns.Report
+	cancelRun     context.CancelFunc
+	latestRelease *updater.ReleaseInfo
+	updating      bool
 }
 
 // NewApp creates a new Resolv application controller.
 func NewApp() *App {
-	a := &App{}
-	a.loadCustomResolvers()
+	a := &App{
+		settings: config.DefaultSettings(),
+	}
+	if s, err := config.LoadSettings(); err == nil && s != nil {
+		a.settings = *s
+	}
+	if custom, err := config.LoadCustomResolvers(); err == nil && len(custom) > 0 {
+		a.custom = custom
+	}
 	return a
 }
 
@@ -94,6 +123,16 @@ func (a *App) RefreshNetwork() (*Bootstrap, error) {
 	info, err := sysnet.Detect(a.baseCtx())
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	oldID, newID := "", ""
+	if a.netInfo != nil && a.netInfo.Active != nil {
+		oldID = a.netInfo.Active.ID
+	}
+	if info != nil && info.Active != nil {
+		newID = info.Active.ID
+	}
+	if oldID != newID {
+		a.lastReport = nil
+	}
 	a.netInfo = info
 	return a.bootstrapLocked(), err
 }
@@ -110,12 +149,9 @@ func (a *App) SelectInterface(id string) (*Bootstrap, error) {
 		if a.netInfo.Interfaces[i].ID == id {
 			chosen := a.netInfo.Interfaces[i]
 			a.netInfo.Active = &chosen
-			if len(chosen.DNS) > 0 {
-				a.netInfo.SystemDNS = chosen.DNS
-			}
-			if chosen.Gateway != "" {
-				a.netInfo.Gateway = chosen.Gateway
-			}
+			a.netInfo.SystemDNS = append([]string(nil), chosen.DNS...)
+			a.netInfo.Gateway = chosen.Gateway
+			a.lastReport = nil
 			return a.bootstrapLocked(), nil
 		}
 	}
@@ -137,7 +173,7 @@ func (a *App) AddCustomResolver(name, input string) ([]dns.Resolver, error) {
 		}
 	}
 	a.custom = append(a.custom, r)
-	_ = a.saveCustomResolvers()
+	_ = config.SaveCustomResolvers(a.custom)
 	return a.resolversLocked(), nil
 }
 
@@ -153,7 +189,7 @@ func (a *App) RemoveCustomResolver(id string) ([]dns.Resolver, error) {
 		}
 	}
 	a.custom = out
-	_ = a.saveCustomResolvers()
+	_ = config.SaveCustomResolvers(a.custom)
 	return a.resolversLocked(), nil
 }
 
@@ -185,7 +221,20 @@ func (a *App) RunBenchmark(opts dns.Options) (*dns.Report, error) {
 
 	a.mu.Lock()
 	a.lastReport = report
+	var adapterName string
+	var sysDNS []string
+	if a.netInfo != nil {
+		if a.netInfo.Active != nil {
+			adapterName = a.netInfo.Active.Name
+		}
+		sysDNS = append([]string(nil), a.netInfo.SystemDNS...)
+	}
 	a.mu.Unlock()
+
+	if !report.Cancelled {
+		entry := config.BuildHistoryEntry(report, adapterName, sysDNS)
+		_, _ = config.AppendHistory(entry, 25)
+	}
 
 	return report, nil
 }
@@ -403,15 +452,209 @@ func (a *App) refreshAfterChange() *sysnet.Info {
 }
 
 func (a *App) bootstrapLocked() *Bootstrap {
+	cfgDir, _ := config.Dir()
 	return &Bootstrap{
 		Version:        AppVersion,
 		RepoURL:        AppRepoURL,
 		License:        AppLicense,
+		ConfigDir:      cfgDir,
 		Network:        a.netInfo,
 		Resolvers:      a.resolversLocked(),
-		DefaultOptions: dns.DefaultOptions(),
+		DefaultOptions: a.settings.Options,
+		Settings:       a.settings,
 		LastReport:     a.lastReport,
 	}
+}
+
+// QuickVerifyCurrentDNS runs a fast live latency probe against the active OS DNS.
+func (a *App) QuickVerifyCurrentDNS() (*VerifyResult, error) {
+	info, err := sysnet.Detect(a.baseCtx())
+	a.mu.Lock()
+	if err == nil && info != nil {
+		a.netInfo = info
+	}
+	var sysAddrs []string
+	if a.netInfo != nil {
+		if len(a.netInfo.SystemDNS) > 0 {
+			sysAddrs = append([]string(nil), a.netInfo.SystemDNS...)
+		} else if a.netInfo.Active != nil && len(a.netInfo.Active.DNS) > 0 {
+			sysAddrs = append([]string(nil), a.netInfo.Active.DNS...)
+		} else if a.netInfo.Gateway != "" {
+			sysAddrs = []string{a.netInfo.Gateway}
+		}
+	}
+	var prevAvg float64
+	if a.lastReport != nil {
+		for _, r := range a.lastReport.Results {
+			if r.Resolver.Source == dns.SourceSystem && r.Overall.Valid() {
+				prevAvg = r.Overall.Avg
+				break
+			}
+		}
+	}
+	opts := a.settings.Options
+	a.mu.Unlock()
+
+	if len(sysAddrs) == 0 {
+		return &VerifyResult{
+			Success: false,
+			Message: "No active DNS server detected to verify.",
+		}, nil
+	}
+
+	sysRes, ok := dns.FromAddresses("verify-current", "Current System DNS", dns.CategorySystem, dns.SourceSystem, sysAddrs)
+	if !ok {
+		return &VerifyResult{
+			Success:   false,
+			Message:   "Current DNS addresses cannot be probed directly.",
+			Addresses: sysAddrs,
+		}, nil
+	}
+	enrichFromBuiltin(&sysRes)
+
+	qctx, cancel := context.WithTimeout(a.baseCtx(), 6*time.Second)
+	defer cancel()
+	res := dns.QuickVerify(qctx, sysRes, opts)
+	if !res.Overall.Valid() {
+		return &VerifyResult{
+			Success:      false,
+			ResolverName: sysRes.Description,
+			Addresses:    sysAddrs,
+			LossPct:      res.Overall.Loss,
+			Message:      fmt.Sprintf("Verification failed for %s (100%% loss).", strings.Join(sysAddrs, ", ")),
+		}, nil
+	}
+
+	vr := &VerifyResult{
+		Success:       true,
+		ResolverName:  sysRes.Description,
+		Addresses:     sysAddrs,
+		AvgMs:         res.Overall.Avg,
+		CachedAvgMs:   res.Cached.Avg,
+		UncachedAvgMs: res.Uncached.Avg,
+		P95Ms:         res.Overall.P95,
+		LossPct:       res.Overall.Loss,
+		PreviousAvgMs: prevAvg,
+	}
+	if prevAvg > 0 && res.Overall.Avg > 0 {
+		vr.ImprovementPct = math.Round(((prevAvg-res.Overall.Avg)/prevAvg)*100*10) / 10
+	}
+	nameLabel := strings.Join(sysAddrs, ", ")
+	if sysRes.Description != "" && strings.HasPrefix(sysRes.Description, "Currently using ") {
+		nameLabel = strings.TrimSuffix(strings.TrimPrefix(sysRes.Description, "Currently using "), ".")
+	}
+	vr.ResolverName = nameLabel
+	vr.Message = fmt.Sprintf("Verified %s: %.1f ms avg (cached %.1f ms · uncached %.1f ms · %.0f%% loss)",
+		nameLabel, vr.AvgMs, vr.CachedAvgMs, vr.UncachedAvgMs, vr.LossPct)
+	return vr, nil
+}
+
+// GetSettings returns the user's persistent application settings.
+func (a *App) GetSettings() (*config.Settings, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	cp := a.settings
+	return &cp, nil
+}
+
+// SaveSettings validates and atomically persists application settings.
+func (a *App) SaveSettings(s config.Settings) (*config.Settings, error) {
+	s.Normalize()
+	if err := config.SaveSettings(&s); err != nil {
+		return nil, err
+	}
+	a.mu.Lock()
+	a.settings = s
+	a.mu.Unlock()
+	cp := s
+	return &cp, nil
+}
+
+// GetHistory returns stored benchmark history runs, newest first.
+func (a *App) GetHistory() ([]config.HistoryEntry, error) {
+	return config.LoadHistory()
+}
+
+// ClearHistory deletes all saved benchmark history entries.
+func (a *App) ClearHistory() error {
+	return config.ClearHistory()
+}
+
+// CheckForUpdates checks GitHub Releases for a newer version matching the current OS.
+func (a *App) CheckForUpdates() (*updater.ReleaseInfo, error) {
+	ctx, cancel := context.WithTimeout(a.baseCtx(), 15*time.Second)
+	defer cancel()
+	info, err := updater.CheckForUpdates(ctx, AppVersion, AppRepo)
+	if err != nil {
+		return nil, err
+	}
+	a.mu.Lock()
+	a.latestRelease = info
+	a.mu.Unlock()
+	return info, nil
+}
+
+// DownloadAndApplyUpdate downloads, SHA-256 verifies, and installs the latest release, then restarts Resolv.
+func (a *App) DownloadAndApplyUpdate() (*ActionResult, error) {
+	a.mu.Lock()
+	if a.updating {
+		a.mu.Unlock()
+		return &ActionResult{Success: false, Message: "An update installation is already in progress."}, nil
+	}
+	a.updating = true
+	info := a.latestRelease
+	a.mu.Unlock()
+
+	defer func() {
+		a.mu.Lock()
+		a.updating = false
+		a.mu.Unlock()
+	}()
+
+	if info == nil || !info.IsAvailable {
+		fresh, err := a.CheckForUpdates()
+		if err != nil {
+			return nil, err
+		}
+		info = fresh
+	}
+
+	if !info.IsAvailable {
+		return &ActionResult{Success: true, Message: "Resolv is already running the latest version."}, nil
+	}
+	if !info.AssetReady {
+		msg := info.UpdateNote
+		if msg == "" {
+			msg = "Release binary is not ready for automatic download yet."
+		}
+		return &ActionResult{Success: false, Message: msg}, nil
+	}
+
+	dlCtx, cancel := context.WithTimeout(a.baseCtx(), 5*time.Minute)
+	defer cancel()
+
+	if err := updater.DownloadAndApplyUpdate(dlCtx, info, func(p updater.UpdateProgress) {
+		a.emit("update:progress", p)
+	}); err != nil {
+		return &ActionResult{
+			Success: false,
+			Message: err.Error(),
+		}, nil
+	}
+
+	// Delay shutdown briefly so the RPC resolves cleanly in the UI before the swap helper replaces the binary.
+	time.AfterFunc(350*time.Millisecond, func() {
+		if a.ctx != nil {
+			runtime.Quit(a.ctx)
+		}
+		time.Sleep(1500 * time.Millisecond)
+		os.Exit(0)
+	})
+
+	return &ActionResult{
+		Success: true,
+		Message: fmt.Sprintf("Update v%s verified (SHA-256) — restarting Resolv...", info.Version),
+	}, nil
 }
 
 // resolversLocked builds the ordered resolver list:
@@ -486,42 +729,4 @@ func (a *App) emit(event string, data any) {
 	}
 	defer func() { _ = recover() }()
 	runtime.EventsEmit(a.ctx, event, data)
-}
-
-func configFilePath() (string, error) {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "Resolv", "custom_resolvers.json"), nil
-}
-
-func (a *App) loadCustomResolvers() {
-	p, err := configFilePath()
-	if err != nil {
-		return
-	}
-	b, err := os.ReadFile(p)
-	if err != nil {
-		return
-	}
-	var list []dns.Resolver
-	if err := json.Unmarshal(b, &list); err == nil {
-		a.custom = list
-	}
-}
-
-func (a *App) saveCustomResolvers() error {
-	p, err := configFilePath()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return err
-	}
-	b, err := json.MarshalIndent(a.custom, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(p, b, 0o644)
 }
