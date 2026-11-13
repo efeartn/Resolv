@@ -60,6 +60,32 @@ Standalone binaries are automatically compiled and published by GitHub Actions o
 | **Linux** | `x86_64 (amd64)` | [`resolv-linux-amd64`](https://github.com/efeartn/Resolv/releases/latest/download/resolv-linux-amd64) | `WebKitGTK 4.1` |
 | **Checksums** | `SHA-256` | [`SHA256SUMS.txt`](https://github.com/efeartn/Resolv/releases/latest/download/SHA256SUMS.txt) | — |
 
+<details>
+<summary><strong>First-Run Notes &amp; SHA-256 Verification</strong></summary>
+
+- **Windows:** Standalone binary (`resolv-windows-amd64.exe`). Place it in a user-writable folder (e.g. `Desktop` or `%LocalAppData%\Programs\Resolv`) so one-click **Updates** can replace it cleanly. UAC elevation is requested only when changing DNS settings.
+- **macOS:** Extract `resolv-macos-universal.zip` and move `Resolv.app` to `/Applications`. Because CI builds are unsigned, if Gatekeeper blocks first launch run:
+  ```bash
+  xattr -cr /Applications/Resolv.app
+  ```
+- **Linux:** Ensure `WebKitGTK 4.1` runtime is installed (`sudo apt install libwebkit2gtk-4.1-0` on Debian/Ubuntu), then make executable:
+  ```bash
+  chmod +x resolv-linux-amd64 && ./resolv-linux-amd64
+  ```
+- **Verify SHA-256 against `SHA256SUMS.txt`:**
+  ```powershell
+  # Windows PowerShell
+  Get-FileHash .\resolv-windows-amd64.exe -Algorithm SHA256
+  ```
+  ```bash
+  # macOS / Linux
+  shasum -a 256 -c SHA256SUMS.txt 2>/dev/null || sha256sum -c SHA256SUMS.txt --ignore-missing
+  ```
+
+</details>
+
+> **What's New in [`v1.1.0`](https://github.com/efeartn/Resolv/releases/tag/v1.1.0):** Built-in SHA-256 verified auto-updater, live row-by-row streaming results, instant post-switch `Verify Speed` checks, persistent settings & 25-run benchmark history, dynamic `DoT`/`TCP` Pro telemetry columns, and 4 additional built-in resolvers. See [CHANGELOG.md](./CHANGELOG.md).
+
 ---
 
 ## Key Capabilities
@@ -93,8 +119,12 @@ Standalone binaries are automatically compiled and published by GitHub Actions o
 
 ### 🔄 4. Built-In Updater, Live Streaming & Persistent History (`internal/updater/`, `internal/config/`)
 - **Startup Auto-Check & Manual Software Update:** Checks GitHub Releases asynchronously on launch (can be toggled in **Settings**) and highlights the header **Updates** pill when a newer version is published. Verifies downloads strictly against `SHA256SUMS.txt` and performs atomic cross-platform replacement and restart.
-- **Zero Config Loss Across Upgrades:** Preferences (`settings.json`), custom DNS resolvers (`custom_resolvers.json`), and the last 25 benchmark runs (`history.json`) are stored inside your OS user configuration directory rather than beside the binary.
-- **Real-Time Row Streaming & Instant Verify:** Benchmarks stream partial snapshots live while queries run, and switching DNS automatically probes your active resolver (`Verify Speed`) to confirm live latency and speedup %.
+- **Zero Config Loss Across Upgrades:** All persistent data lives inside your OS user configuration folder rather than beside the executable:
+  - **Windows:** `%AppData%\Resolv\`
+  - **macOS:** `~/Library/Application Support/Resolv/`
+  - **Linux:** `$XDG_CONFIG_HOME/Resolv/` (`~/.config/Resolv/`)
+  - Stores `settings.json` (view/filter/sort & default benchmark options), `custom_resolvers.json`, and `history.json` (last 25 benchmark runs).
+- **Real-Time Row Streaming & Instant Verify:** Benchmarks stream partial snapshots live while queries run, and switching DNS or clicking **Verify Speed** automatically probes your active resolver to confirm live latency and speedup %.
 
 ---
 
@@ -117,6 +147,8 @@ In addition to auto-detecting your **Current System DNS** and **Local Router / G
 | **Control D AdBlock** | `Ad-blocking` | `76.76.2.2` | `76.76.10.2` | `https://freedns.controld.com/p2` | `p2.freedns.controld.com` |
 | **CleanBrowsing Family** | `Family` | `185.228.168.168` | `185.228.169.168` | `https://doh.cleanbrowsing.org/doh/family-filter/` | `family-filter-dns.cleanbrowsing.org` |
 
+> _Note:_ Encrypted-only **Mullvad DNS** (`https://dns.mullvad.net/dns-query` / `dns.mullvad.net`) is also included as a `Deprecated` reference entry, skipped automatically during UDP-only runs, and excluded from auto-switch recommendations.
+
 ---
 
 ## Keyboard Shortcuts
@@ -135,10 +167,11 @@ In addition to auto-detecting your **Current System DNS** and **Local Router / G
 ```text
 Resolv/
 ├── LICENSE                         # GNU General Public License v3.0
+├── CHANGELOG.md                    # Versioned release notes (Keep a Changelog)
 ├── go.mod / go.sum                 # Go module configuration
 ├── wails.json                      # Wails v2 project & packaging configuration
 ├── main.go                         # Native desktop window & embedded assets
-├── app.go                          # Wails bound controller & custom resolver persistence
+├── app.go                          # Wails controller: benchmark, net, settings, history & updates
 ├── .github/workflows/release.yml   # Automated multi-OS GitHub Actions release pipeline
 ├── build/
 │   ├── appicon.svg                 # Pure flat geometric vector icon (zero gradients/filters)

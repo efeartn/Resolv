@@ -1,0 +1,49 @@
+# Changelog
+
+All notable changes to **Resolv** are documented in this file.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [v1.1.0] - 2026-11-13
+
+### Added
+- **In-App Auto-Updater & Manual Update Check:**
+  - Asynchronous non-blocking update check on app launch (toggleable in **Settings**) with a quiet glowing **Updates** header pill when a newer GitHub release is available.
+  - Dedicated **Software Update** modal showing installed vs. latest version, release notes, artifact size, `SHA-256` verification badge, and a real-time download/verify/install progress bar.
+  - Strict `SHA256SUMS.txt` verification prior to atomic cross-platform self-replacement and restart on Windows (`.exe`), macOS (`Resolv.app` inside `.zip`), and Linux (`resolv-linux-amd64`), with clear fallback messaging for read-only install folders or in-progress CI builds.
+- **Persistent Settings & Benchmark History (`os.UserConfigDir()/Resolv`):**
+  - Stored independently from the app binary in `settings.json`, `custom_resolvers.json`, and `history.json` (up to 25 recent runs) so upgrades never overwrite user configuration.
+  - Added **Settings** modal for startup auto-check preference, default protocols, query count, timeout, custom uncached test zone (`UncachedBase`), and integrity probes. View mode, category filter, and sort order persist automatically across restarts.
+  - Added **History** modal to review and compare past benchmark snapshots across adapters, Wi-Fi networks, and ISPs (with **Clear History**).
+- **Live Streaming Benchmark Rows:** Simple View and Pro Telemetry now update row-by-row in real time during benchmarks (`Progress.Partial`) while preserving open resolver drawers.
+- **Post-Switch Speed Verification (`Verify Speed`):** Applying a resolver or resetting to DHCP automatically runs a fast live probe (`QuickVerifyCurrentDNS`) to display verified average latency and improvement `%` on the Current System DNS card.
+- **Expanded Built-In Resolvers & Custom Filter:** Added `Cloudflare Malware` (`1.1.1.2`), `Cloudflare Family` (`1.1.1.3`), `AdGuard Family` (`94.140.14.15`), and `Control D AdBlock` (`76.76.2.2`), plus a dedicated **Custom** category filter chip.
+
+### Fixed & Improved
+- **Skipped Status Clarity:** Resolvers with no endpoints matching enabled protocols (such as encrypted-only resolvers under UDP-only runs) now report `skipped` cleanly instead of `failed` / `Unreachable` and are omitted from recommendations.
+- **Dynamic Pro Table Protocol Columns:** `DoT :853` and `TCP :53` telemetry columns automatically appear alongside `UDP :53` and `DoH` when tested.
+- **Winner Banner State Sync:** Hides `Apply Best DNS` when the current DNS is already the fastest option (`currentIsFastest`) and updates immediately after applying/resetting DNS.
+- **Adapter & Custom List State:** Switching network adapters clears stale prior-adapter metrics; adding or removing custom resolvers updates active report rows immediately; modal backdrops close dialogs on click (guarded during update installation).
+
+### Download Checksums (`SHA-256`)
+- `resolv-windows-amd64.exe`: `e084e3c76b1c30bed5ab4cc2df9e33ce061b3faa0e7a0e5d82772d90bbf00c6f`
+- `resolv-macos-universal.zip`: `0467793de330e8d8e5ae3b2028f773cc75c26625ab7e5008ee172e896998a100`
+- `resolv-linux-amd64`: `44869e69cb5ee7c196db930369027929374b230461e1875ceedb0b0defc4bc39`
+
+---
+
+## [v1.0.1] - 2026-11-12
+
+### Changed
+- Added Simple View and Pro Telemetry UI screenshots, badges, and multi-OS download matrix to `README.md`.
+- Updated Windows/Wails application metadata version to `1.0.1`.
+
+---
+
+## [v1.0.0] - 2026-11-12
+
+### Added
+- Initial public release of **Resolv**, built with Go, `github.com/miekg/dns`, and Wails v2.
+- Anti-bufferbloat multi-protocol DNS engine (`UDP :53`, `TCP :53`, `DoH`, `DoT :853`) measuring Cached vs. Uncached latency, P95, Jitter, and Packet Loss.
+- Security & censorship probes (DNSSEC validation, ad-blocking sinkhole detection, and ISP port-53 hijacking/proxying checks).
+- Native cross-platform adapter detection, one-click DNS switching/reset, cache flush, and elevation fallback on Windows, macOS, and Linux.
+- JSON, CSV, and Markdown benchmark report exports and custom DNS resolver support.
