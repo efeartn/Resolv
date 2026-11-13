@@ -84,7 +84,7 @@ Standalone binaries are automatically compiled and published by GitHub Actions o
 
 </details>
 
-> **What's New in [`v1.1.0`](https://github.com/efeartn/Resolv/releases/tag/v1.1.0):** Built-in SHA-256 verified auto-updater, live row-by-row streaming results, instant post-switch `Verify Speed` checks, persistent settings & 25-run benchmark history, dynamic `DoT`/`TCP` Pro telemetry columns, and 4 additional built-in resolvers. See [CHANGELOG.md](./CHANGELOG.md).
+> **What's New in [`v1.1.1`](https://github.com/efeartn/Resolv/releases/tag/v1.1.1):** Audited all built-in DNS providers live, removed shut-down Mullvad Public DNS, added **DNS4EU** (`Protective`, `Unfiltered`, `AdBlock`), **Quad9 ECS**, **OpenDNS FamilyShield**, and **DNS.SB**, fixed Control D Pro DoT fallback, and includes the `v1.1.0` SHA-256 auto-updater, streaming rows, and persistent history. See [CHANGELOG.md](./CHANGELOG.md).
 
 ---
 
@@ -139,15 +139,19 @@ In addition to auto-detecting your **Current System DNS** and **Local Router / G
 | **Cloudflare Family** | `Family` | `1.1.1.3` | `1.0.0.3` | `https://family.cloudflare-dns.com/dns-query` | `family.cloudflare-dns.com` |
 | **Google Public DNS** | `Standard` | `8.8.8.8` | `8.8.4.4` | `https://dns.google/dns-query` | `dns.google` |
 | **Quad9** | `Privacy` | `9.9.9.9` | `149.112.112.112` | `https://dns.quad9.net/dns-query` | `dns.quad9.net` |
+| **Quad9 ECS** | `Privacy` | `9.9.9.11` | `149.112.112.11` | `https://dns11.quad9.net/dns-query` | `dns11.quad9.net` |
 | **AdGuard DNS** | `Ad-blocking` | `94.140.14.14` | `94.140.15.15` | `https://dns.adguard-dns.com/dns-query` | `dns.adguard-dns.com` |
 | **AdGuard Family** | `Family` | `94.140.14.15` | `94.140.15.16` | `https://family.adguard-dns.com/dns-query` | `family.adguard-dns.com` |
 | **NextDNS** | `Privacy` | `45.90.28.0` | `45.90.30.0` | `https://dns.nextdns.io` | `dns.nextdns.io` |
 | **OpenDNS** | `Standard` | `208.67.222.222` | `208.67.220.220` | `https://doh.opendns.com/dns-query` | `dns.opendns.com` |
+| **OpenDNS FamilyShield** | `Family` | `208.67.222.123` | `208.67.220.123` | `https://doh.familyshield.opendns.com/dns-query` | `familyshield.opendns.com` |
 | **Control D** | `Standard` | `76.76.2.0` | `76.76.10.0` | `https://freedns.controld.com/p0` | `p0.freedns.controld.com` |
 | **Control D AdBlock** | `Ad-blocking` | `76.76.2.2` | `76.76.10.2` | `https://freedns.controld.com/p2` | `p2.freedns.controld.com` |
+| **DNS4EU Protective** | `Privacy` | `86.54.11.1` | `86.54.11.201` | `https://protective.joindns4.eu/dns-query` | `protective.joindns4.eu` |
+| **DNS4EU Unfiltered** | `Privacy` | `86.54.11.100` | `86.54.11.200` | `https://unfiltered.joindns4.eu/dns-query` | `unfiltered.joindns4.eu` |
+| **DNS4EU AdBlock** | `Ad-blocking` | `86.54.11.13` | `86.54.11.213` | `https://noads.joindns4.eu/dns-query` | `noads.joindns4.eu` |
+| **DNS.SB** | `Privacy` | `185.222.222.222` | `45.11.45.11` | `https://doh.sb/dns-query` | `dot.sb` |
 | **CleanBrowsing Family** | `Family` | `185.228.168.168` | `185.228.169.168` | `https://doh.cleanbrowsing.org/doh/family-filter/` | `family-filter-dns.cleanbrowsing.org` |
-
-> _Note:_ Encrypted-only **Mullvad DNS** (`https://dns.mullvad.net/dns-query` / `dns.mullvad.net`) is also included as a `Deprecated` reference entry, skipped automatically during UDP-only runs, and excluded from auto-switch recommendations.
 
 ---
 

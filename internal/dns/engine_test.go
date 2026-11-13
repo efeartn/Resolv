@@ -9,8 +9,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	mdns "github.com/miekg/dns"
 )
@@ -159,7 +161,7 @@ func TestNormalizeAndSkippedAndLiveProgress(t *testing.T) {
 
 	// UDP-only run on a DoH-only resolver should mark status="skipped", not "failed".
 	dohOnly := Resolver{ID: "dohonly", Name: "DoH Only", Category: CategoryPrivacy, Source: SourceBuiltin, DoH: "https://example.com/dns-query"}
-	rep := Run(context.Background(), []Resolver{dohOnly}, Options{Protocols: []string{"udp"}, Queries: 1, CheckIntegrity: false}, "1.1.0", nil)
+	rep := Run(context.Background(), []Resolver{dohOnly}, Options{Protocols: []string{"udp"}, Queries: 1, CheckIntegrity: false}, "1.1.1", nil)
 	if len(rep.Results) != 1 || rep.Results[0].Status != "skipped" {
 		t.Fatalf("expected skipped status for DoH-only resolver in UDP mode, got %+v", rep.Results)
 	}
@@ -212,7 +214,7 @@ func TestNormalizeAndSkippedAndLiveProgress(t *testing.T) {
 		StaggerMs:      0,
 		TimeoutMs:      1000,
 		CheckIntegrity: false,
-	}, "1.1.0", func(p Progress) {
+	}, "1.1.1", func(p Progress) {
 		if len(p.Partial) > 0 {
 			partialCount++
 		}
@@ -224,5 +226,115 @@ func TestNormalizeAndSkippedAndLiveProgress(t *testing.T) {
 	qv := QuickVerify(context.Background(), mockRes, DefaultOptions())
 	if qv.Status != "ok" || qv.Overall.Sent != 4 || qv.Overall.Received != 4 {
 		t.Fatalf("QuickVerify unexpected result: %+v", qv)
+	}
+}
+
+func TestBuiltinResolversIntegrity(t *testing.T) {
+	list := Builtin()
+	if len(list) == 0 {
+		t.Fatal("builtin resolver list must not be empty")
+	}
+	seenID := make(map[string]bool, len(list))
+	seenPrimaryIP := make(map[string]string, len(list))
+	for _, r := range list {
+		if r.ID == "" || r.Name == "" || r.Description == "" {
+			t.Fatalf("builtin resolver missing metadata: %+v", r)
+		}
+		if r.ID == "mullvad" || r.Deprecated {
+			t.Fatalf("discontinued resolver must not ship in active builtin list: %+v", r)
+		}
+		if seenID[r.ID] {
+			t.Fatalf("duplicate builtin resolver ID %q", r.ID)
+		}
+		seenID[r.ID] = true
+		if len(r.IPv4) == 0 || len(r.IPv6) == 0 {
+			t.Fatalf("builtin resolver %q must include both IPv4 and IPv6 addresses", r.ID)
+		}
+		for _, ipStr := range r.IPv4 {
+			if ip := net.ParseIP(ipStr); ip == nil || ip.To4() == nil {
+				t.Fatalf("builtin resolver %q invalid IPv4 %q", r.ID, ipStr)
+			}
+		}
+		for _, ipStr := range r.IPv6 {
+			if ip := net.ParseIP(ipStr); ip == nil || ip.To4() != nil {
+				t.Fatalf("builtin resolver %q invalid IPv6 %q", r.ID, ipStr)
+			}
+		}
+		if prev, dup := seenPrimaryIP[r.IPv4[0]]; dup {
+			t.Fatalf("duplicate primary IPv4 %q on %q and %q", r.IPv4[0], prev, r.ID)
+		}
+		seenPrimaryIP[r.IPv4[0]] = r.ID
+
+		u, err := url.Parse(r.DoH)
+		if err != nil || u.Scheme != "https" || u.Host == "" {
+			t.Fatalf("builtin resolver %q invalid DoH URL %q: %v", r.ID, r.DoH, err)
+		}
+		if r.DoT == "" || net.ParseIP(r.DoT) != nil {
+			t.Fatalf("builtin resolver %q invalid DoT hostname %q", r.ID, r.DoT)
+		}
+		if !r.Applicable() {
+			t.Fatalf("builtin resolver %q should be Applicable()", r.ID)
+		}
+	}
+}
+
+func TestStreamQuerierFallbackAddr(t *testing.T) {
+	q, err := newQuerier(Resolver{
+		ID:   "controld",
+		IPv4: []string{"76.76.2.0"},
+		DoT:  "p0.freedns.controld.com",
+	}, ProtoDoT, time.Second, nil)
+	if err != nil {
+		t.Fatalf("newQuerier ProtoDoT: %v", err)
+	}
+	sq, ok := q.(*streamQuerier)
+	if !ok {
+		t.Fatalf("expected *streamQuerier, got %T", q)
+	}
+	if sq.addr != "76.76.2.0:853" || sq.fallbackAddr != "p0.freedns.controld.com:853" {
+		t.Fatalf("unexpected DoT addrs: addr=%q fallback=%q", sq.addr, sq.fallbackAddr)
+	}
+
+	// Reserve and immediately close a local port so dialing it fails fast with connection refused.
+	closedLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadAddr := closedLn.Addr().String()
+	_ = closedLn.Close()
+
+	// Spin up a live TCP DNS listener to act as fallbackAddr.
+	pc, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &mdns.Server{
+		Listener: pc,
+		Handler: mdns.HandlerFunc(func(w mdns.ResponseWriter, r *mdns.Msg) {
+			resp := new(mdns.Msg)
+			resp.SetReply(r)
+			_ = w.WriteMsg(resp)
+		}),
+	}
+	go func() { _ = srv.ActivateAndServe() }()
+	defer func() { _ = srv.Shutdown() }()
+
+	fallbackTester := &streamQuerier{
+		addr:         deadAddr,
+		fallbackAddr: pc.Addr().String(),
+		timeout:      time.Second,
+	}
+	defer fallbackTester.close()
+
+	resp, _, err := fallbackTester.exchange(context.Background(), newQuery("example.com", mdns.TypeA, false))
+	if err != nil {
+		t.Fatalf("expected fallback dial to succeed, got %v", err)
+	}
+	if resp == nil || resp.Rcode != mdns.RcodeSuccess {
+		t.Fatalf("unexpected fallback DNS response: %+v", resp)
+	}
+	if fallbackTester.addr != pc.Addr().String() || fallbackTester.fallbackAddr != "" {
+		t.Fatalf("expected working fallback address to be promoted, got addr=%q fallback=%q",
+			fallbackTester.addr, fallbackTester.fallbackAddr)
 	}
 }

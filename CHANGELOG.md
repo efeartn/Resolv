@@ -3,6 +3,26 @@
 All notable changes to **Resolv** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.1.1] - 2026-11-13
+
+### Removed
+- **Removed Discontinued Mullvad Public DNS:** Removed `dns.mullvad.net` following Mullvad's permanent shutdown of its public DNS service in November 2026 (live checks showed DoH connection resets).
+
+### Added
+- **6 Live-Verified Built-In Public Resolvers (all supporting IPv4, IPv6, UDP, TCP, DoH & DoT):**
+  - **DNS4EU Protective** (`86.54.11.1` / `86.54.11.201`) — Official EU GDPR-compliant malware and phishing protection.
+  - **DNS4EU Unfiltered** (`86.54.11.100` / `86.54.11.200`) — EU GDPR-compliant no-log resolver with zero filtering.
+  - **DNS4EU AdBlock** (`86.54.11.13` / `86.54.11.213`) — EU GDPR-compliant ad, tracker, and threat blocking.
+  - **Quad9 ECS** (`9.9.9.11` / `149.112.112.11`) — Quad9 malware blocking + DNSSEC with EDNS Client Subnet enabled for faster CDN routing.
+  - **OpenDNS FamilyShield** (`208.67.222.123` / `208.67.220.123`) — Pre-configured Cisco adult-content and phishing filter.
+  - **DNS.SB** (`185.222.222.222` / `45.11.45.11`) — Privacy-first global anycast resolver with DNSSEC and zero logging.
+
+### Fixed
+- **Pro Mode DoT Fallback for Split-IP Providers (Control D):** `streamQuerier` now falls back from `PrimaryAddr():853` to `<DoT Host>:853` when the plain-DNS anycast IP refuses port `853`, fixing Pro-mode DoT benchmarks for **Control D** (`76.76.2.0` -> `p0.freedns.controld.com`) and **Control D AdBlock** (`76.76.2.2` -> `p2.freedns.controld.com`).
+- **All Existing Providers Live-Audited:** Verified Cloudflare, Google Public DNS, Quad9, AdGuard DNS, NextDNS, OpenDNS, Control D, and CleanBrowsing remain active across UDP `:53`, TCP `:53`, DoH (`RFC 8484` over HTTP/2), and DoT (`:853`).
+
+---
+
 ## [v1.1.0] - 2026-11-13
 
 ### Added

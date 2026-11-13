@@ -65,24 +65,31 @@ func (q *udpQuerier) close() {}
 // streamQuerier keeps one persistent TCP or TLS connection per server and
 // serialises queries over it (RFC 7766 connection reuse).
 type streamQuerier struct {
-	mu      sync.Mutex
-	addr    string
-	tlsConf *tls.Config // nil for plain TCP
-	timeout time.Duration
-	conn    *mdns.Conn
+	mu           sync.Mutex
+	addr         string
+	fallbackAddr string
+	tlsConf      *tls.Config // nil for plain TCP
+	timeout      time.Duration
+	conn         *mdns.Conn
+}
+
+func (q *streamQuerier) dialAddr(ctx context.Context, addr string) (net.Conn, error) {
+	d := &net.Dialer{Timeout: q.timeout, KeepAlive: 15 * time.Second}
+	if q.tlsConf != nil {
+		return (&tls.Dialer{NetDialer: d, Config: q.tlsConf}).DialContext(ctx, "tcp", addr)
+	}
+	return d.DialContext(ctx, "tcp", addr)
 }
 
 func (q *streamQuerier) dial(ctx context.Context) error {
-	d := &net.Dialer{Timeout: q.timeout, KeepAlive: 15 * time.Second}
-	var (
-		c   net.Conn
-		err error
-	)
-	if q.tlsConf != nil {
-		td := &tls.Dialer{NetDialer: d, Config: q.tlsConf}
-		c, err = td.DialContext(ctx, "tcp", q.addr)
-	} else {
-		c, err = d.DialContext(ctx, "tcp", q.addr)
+	c, err := q.dialAddr(ctx, q.addr)
+	if err != nil && q.fallbackAddr != "" && q.fallbackAddr != q.addr && ctx.Err() == nil {
+		// Some providers serve plain :53 and DoT :853 on distinct frontend IPs; fall back to the SNI host.
+		if fc, ferr := q.dialAddr(ctx, q.fallbackAddr); ferr == nil {
+			q.addr = q.fallbackAddr
+			q.fallbackAddr = ""
+			c, err = fc, nil
+		}
 	}
 	if err != nil {
 		return err
@@ -241,13 +248,21 @@ func newQuerier(r Resolver, p Protocol, timeout time.Duration, doh *http.Client)
 			return nil, errNoEndpoint
 		}
 		host := r.PrimaryAddr()
+		fallback := ""
 		if host == "" {
 			host = r.DoT
+		} else if net.ParseIP(r.DoT) == nil {
+			fallback = net.JoinHostPort(r.DoT, "853")
+		}
+		addr := net.JoinHostPort(host, "853")
+		if fallback == addr {
+			fallback = ""
 		}
 		return &streamQuerier{
-			addr:    net.JoinHostPort(host, "853"),
-			timeout: timeout,
-			tlsConf: &tls.Config{ServerName: r.DoT, MinVersion: tls.VersionTLS12},
+			addr:         addr,
+			fallbackAddr: fallback,
+			timeout:      timeout,
+			tlsConf:      &tls.Config{ServerName: r.DoT, MinVersion: tls.VersionTLS12},
 		}, nil
 	case ProtoDoH:
 		if r.DoH == "" {

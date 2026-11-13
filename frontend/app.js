@@ -6,7 +6,7 @@
 
   // Application UI State
   const state = {
-    version: '1.1.0',
+    version: '1.1.1',
     mode: 'simple',            // 'simple' | 'pro'
     categoryFilter: 'all',     // 'all' | 'Privacy' | 'Ad-blocking' | 'Standard' | 'Family' | 'Custom'
     searchQuery: '',           // free-text filter
@@ -1062,7 +1062,7 @@
 
   function renderUpdateModal(errorMsg = '') {
     const info = state.updateInfo;
-    $('updateCurrentVer').textContent = `v${state.version || '1.1.0'}`;
+    $('updateCurrentVer').textContent = `v${state.version || '1.1.1'}`;
     $('updateLatestVer').textContent = info && info.version ? `v${info.version}` : '—';
 
     const badge = $('updateModalBadge');
@@ -1579,7 +1579,7 @@
 
   function applyBootstrap(b) {
     if (!b) return;
-    state.version = b.version || '1.1.0';
+    state.version = b.version || '1.1.1';
     state.configDir = b.configDir || '';
     $('appVersionBadge').textContent = `v${state.version}`;
     if (b.network) {
@@ -1662,21 +1662,29 @@
       { id: 'cloudflare-family', name: 'Cloudflare Family', category: 'Family', source: 'builtin', description: 'Cloudflare 1.1.1.3 family-safe endpoint.', ipv4: ['1.1.1.3', '1.0.0.3'], doh: 'https://family.cloudflare-dns.com/dns-query', dot: 'family.cloudflare-dns.com' },
       { id: 'google', name: 'Google Public DNS', category: 'Standard', source: 'builtin', description: 'Large global anycast network operated by Google.', ipv4: ['8.8.8.8', '8.8.4.4'], doh: 'https://dns.google/dns-query', dot: 'dns.google' },
       { id: 'quad9', name: 'Quad9', category: 'Privacy', source: 'builtin', description: 'Non-profit resolver with malware-domain blocking and DNSSEC.', ipv4: ['9.9.9.9', '149.112.112.112'], doh: 'https://dns.quad9.net/dns-query', dot: 'dns.quad9.net' },
+      { id: 'quad9-ecs', name: 'Quad9 ECS', category: 'Privacy', source: 'builtin', description: 'Quad9 malware blocking and DNSSEC with EDNS Client Subnet (ECS) enabled.', ipv4: ['9.9.9.11', '149.112.112.11'], doh: 'https://dns11.quad9.net/dns-query', dot: 'dns11.quad9.net' },
       { id: 'adguard', name: 'AdGuard DNS', category: 'Ad-blocking', source: 'builtin', description: 'Blocks ads, trackers and phishing at the DNS level.', ipv4: ['94.140.14.14', '94.140.15.15'], doh: 'https://dns.adguard-dns.com/dns-query', dot: 'dns.adguard-dns.com' },
       { id: 'adguard-family', name: 'AdGuard Family', category: 'Family', source: 'builtin', description: 'Blocks ads and adult content.', ipv4: ['94.140.14.15', '94.140.15.16'], doh: 'https://family.adguard-dns.com/dns-query', dot: 'family.adguard-dns.com' },
       { id: 'nextdns', name: 'NextDNS', category: 'Privacy', source: 'builtin', description: 'Configurable privacy resolver.', ipv4: ['45.90.28.0', '45.90.30.0'], doh: 'https://dns.nextdns.io', dot: 'dns.nextdns.io' },
       { id: 'opendns', name: 'OpenDNS', category: 'Standard', source: 'builtin', description: 'Cisco Umbrella public resolver with phishing protection.', ipv4: ['208.67.222.222', '208.67.220.220'], doh: 'https://doh.opendns.com/dns-query', dot: 'dns.opendns.com' },
+      { id: 'opendns-family', name: 'OpenDNS FamilyShield', category: 'Family', source: 'builtin', description: 'Cisco OpenDNS family filter pre-configured to block adult content and phishing.', ipv4: ['208.67.222.123', '208.67.220.123'], doh: 'https://doh.familyshield.opendns.com/dns-query', dot: 'familyshield.opendns.com' },
       { id: 'controld', name: 'Control D', category: 'Standard', source: 'builtin', description: 'Free unfiltered resolver by Control D.', ipv4: ['76.76.2.0', '76.76.10.0'], doh: 'https://freedns.controld.com/p0', dot: 'p0.freedns.controld.com' },
       { id: 'controld-adblock', name: 'Control D AdBlock', category: 'Ad-blocking', source: 'builtin', description: 'Control D Free DNS filtering ads and trackers.', ipv4: ['76.76.2.2', '76.76.10.2'], doh: 'https://freedns.controld.com/p2', dot: 'p2.freedns.controld.com' },
-      { id: 'cleanbrowsing', name: 'CleanBrowsing Family', category: 'Family', source: 'builtin', description: 'Family filter: blocks adult content and enforces SafeSearch.', ipv4: ['185.228.168.168', '185.228.169.168'], doh: 'https://doh.cleanbrowsing.org/doh/family-filter/', dot: 'family-filter-dns.cleanbrowsing.org' },
-      { id: 'mullvad', name: 'Mullvad DNS', category: 'Privacy', source: 'builtin', description: 'Encrypted-only (DoH/DoT) resolver.', doh: 'https://dns.mullvad.net/dns-query', dot: 'dns.mullvad.net', deprecated: true }
+      { id: 'dns4eu-protective', name: 'DNS4EU Protective', category: 'Privacy', source: 'builtin', description: 'Official EU GDPR-compliant resolver blocking malware and phishing.', ipv4: ['86.54.11.1', '86.54.11.201'], doh: 'https://protective.joindns4.eu/dns-query', dot: 'protective.joindns4.eu' },
+      { id: 'dns4eu-unfiltered', name: 'DNS4EU Unfiltered', category: 'Privacy', source: 'builtin', description: 'Official EU GDPR-compliant resolver with zero filtering.', ipv4: ['86.54.11.100', '86.54.11.200'], doh: 'https://unfiltered.joindns4.eu/dns-query', dot: 'unfiltered.joindns4.eu' },
+      { id: 'dns4eu-adblock', name: 'DNS4EU AdBlock', category: 'Ad-blocking', source: 'builtin', description: 'Official EU GDPR-compliant resolver filtering ads and trackers.', ipv4: ['86.54.11.13', '86.54.11.213'], doh: 'https://noads.joindns4.eu/dns-query', dot: 'noads.joindns4.eu' },
+      { id: 'dns-sb', name: 'DNS.SB', category: 'Privacy', source: 'builtin', description: 'Privacy-first global anycast resolver with DNSSEC and zero logging.', ipv4: ['185.222.222.222', '45.11.45.11'], doh: 'https://doh.sb/dns-query', dot: 'dot.sb' },
+      { id: 'cleanbrowsing', name: 'CleanBrowsing Family', category: 'Family', source: 'builtin', description: 'Family filter: blocks adult content and enforces SafeSearch.', ipv4: ['185.228.168.168', '185.228.169.168'], doh: 'https://doh.cleanbrowsing.org/doh/family-filter/', dot: 'family-filter-dns.cleanbrowsing.org' }
     ];
 
     const buildDemoResult = (r) => {
       const bases = {
         'cloudflare': 11.4, 'cloudflare-security': 12.1, 'cloudflare-family': 13.0,
-        'quad9': 16.8, 'google': 18.9, 'nextdns': 22.4, 'controld': 24.7, 'controld-adblock': 26.2,
-        'adguard': 29.5, 'adguard-family': 31.1, 'opendns': 34.2, 'system-dns': 41.6, 'cleanbrowsing': 48.3, 'mullvad': 64.1
+        'quad9': 16.8, 'quad9-ecs': 15.9, 'google': 18.9, 'nextdns': 22.4,
+        'dns4eu-protective': 23.1, 'dns4eu-unfiltered': 22.6, 'dns4eu-adblock': 24.0,
+        'controld': 24.7, 'controld-adblock': 26.2, 'dns-sb': 27.4,
+        'adguard': 29.5, 'adguard-family': 31.1, 'opendns': 34.2, 'opendns-family': 35.6,
+        'system-dns': 41.6, 'cleanbrowsing': 48.3
       };
       const base = bases[r.id] || 31.0;
       const cachedAvg = +(base * 0.68).toFixed(2);
@@ -1693,7 +1701,7 @@
         +(cachedAvg * 0.88).toFixed(2), +(uncachedAvg * 1.04).toFixed(2),
         +(cachedAvg * 0.91).toFixed(2), +(uncachedAvg * 1.16).toFixed(2)
       ];
-      const blocksAds = r.id === 'adguard' || r.id === 'controld-adblock';
+      const blocksAds = r.id === 'adguard' || r.id === 'controld-adblock' || r.id === 'dns4eu-adblock';
       return {
         resolver: r,
         rank: 0,
@@ -1714,8 +1722,8 @@
     };
 
     return {
-      getBootstrap: () => ({ version: '1.1.0', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
-      selectInterface: () => ({ version: '1.1.0', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
+      getBootstrap: () => ({ version: '1.1.1', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
+      selectInterface: () => ({ version: '1.1.1', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
       addCustomResolver(name, input) {
         if (!input) throw new Error('Enter an IPv4/IPv6 address or DoH URL');
         resolvers = [...resolvers, { id: 'custom-' + Date.now(), name: name || input, category: 'Custom', source: 'custom', ipv4: [input] }];
@@ -1743,10 +1751,10 @@
         message: `Verified ${demoNet.systemDns.join(', ')}: 11.4 ms avg (cached 7.8 ms · uncached 15.0 ms · 0% loss)`
       }),
       checkForUpdates: () => ({
-        currentVersion: '1.1.0',
-        version: '1.1.0',
-        tagName: 'v1.1.0',
-        title: 'Resolv v1.1.0',
+        currentVersion: '1.1.1',
+        version: '1.1.1',
+        tagName: 'v1.1.1',
+        title: 'Resolv v1.1.1',
         body: '- Auto-updater with SHA-256 verification\n- Live streaming benchmark results\n- Persistent settings and benchmark history',
         htmlUrl: 'https://github.com/efeartn/Resolv/releases',
         isAvailable: false,
@@ -1783,7 +1791,7 @@
           topResults: results.slice(0, 5).map((r) => ({ name: r.resolver.name, category: r.resolver.category, avgMs: r.overall.avgMs, p95Ms: r.overall.p95Ms, jitterMs: r.overall.jitterMs, lossPct: r.overall.lossPct }))
         });
         return {
-          version: '1.1.0',
+          version: '1.1.1',
           durationMs: 1420,
           options: opts,
           results,

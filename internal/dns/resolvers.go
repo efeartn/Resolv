@@ -117,6 +117,13 @@ var builtin = []Resolver{
 		DoH:         "https://dns.quad9.net/dns-query", DoT: "dns.quad9.net",
 	},
 	{
+		ID: "quad9-ecs", Name: "Quad9 ECS", Category: CategoryPrivacy, Source: SourceBuiltin,
+		Description: "Quad9 malware blocking and DNSSEC with EDNS Client Subnet (ECS) enabled for faster CDN routing.",
+		IPv4:        []string{"9.9.9.11", "149.112.112.11"},
+		IPv6:        []string{"2620:fe::11", "2620:fe::fe:11"},
+		DoH:         "https://dns11.quad9.net/dns-query", DoT: "dns11.quad9.net",
+	},
+	{
 		ID: "adguard", Name: "AdGuard DNS", Category: CategoryAdBlock, Source: SourceBuiltin,
 		Description: "Blocks ads, trackers and phishing at the DNS level.",
 		IPv4:        []string{"94.140.14.14", "94.140.15.15"},
@@ -145,6 +152,13 @@ var builtin = []Resolver{
 		DoH:         "https://doh.opendns.com/dns-query", DoT: "dns.opendns.com",
 	},
 	{
+		ID: "opendns-family", Name: "OpenDNS FamilyShield", Category: CategoryFamily, Source: SourceBuiltin,
+		Description: "Cisco OpenDNS family filter pre-configured to block adult content and phishing.",
+		IPv4:        []string{"208.67.222.123", "208.67.220.123"},
+		IPv6:        []string{"2620:119:35::123", "2620:119:53::123"},
+		DoH:         "https://doh.familyshield.opendns.com/dns-query", DoT: "familyshield.opendns.com",
+	},
+	{
 		ID: "controld", Name: "Control D", Category: CategoryStandard, Source: SourceBuiltin,
 		Description: "Free unfiltered resolver by Windscribe's Control D.",
 		IPv4:        []string{"76.76.2.0", "76.76.10.0"},
@@ -159,18 +173,39 @@ var builtin = []Resolver{
 		DoH:         "https://freedns.controld.com/p2", DoT: "p2.freedns.controld.com",
 	},
 	{
+		ID: "dns4eu-protective", Name: "DNS4EU Protective", Category: CategoryPrivacy, Source: SourceBuiltin,
+		Description: "Official EU GDPR-compliant resolver blocking malware, phishing and threat domains.",
+		IPv4:        []string{"86.54.11.1", "86.54.11.201"},
+		IPv6:        []string{"2a13:1001::86:54:11:1", "2a13:1001::86:54:11:201"},
+		DoH:         "https://protective.joindns4.eu/dns-query", DoT: "protective.joindns4.eu",
+	},
+	{
+		ID: "dns4eu-unfiltered", Name: "DNS4EU Unfiltered", Category: CategoryPrivacy, Source: SourceBuiltin,
+		Description: "Official EU GDPR-compliant anycast resolver with zero filtering and strict no-logging.",
+		IPv4:        []string{"86.54.11.100", "86.54.11.200"},
+		IPv6:        []string{"2a13:1001::86:54:11:100", "2a13:1001::86:54:11:200"},
+		DoH:         "https://unfiltered.joindns4.eu/dns-query", DoT: "unfiltered.joindns4.eu",
+	},
+	{
+		ID: "dns4eu-adblock", Name: "DNS4EU AdBlock", Category: CategoryAdBlock, Source: SourceBuiltin,
+		Description: "Official EU GDPR-compliant resolver filtering ads, trackers and malicious domains.",
+		IPv4:        []string{"86.54.11.13", "86.54.11.213"},
+		IPv6:        []string{"2a13:1001::86:54:11:13", "2a13:1001::86:54:11:213"},
+		DoH:         "https://noads.joindns4.eu/dns-query", DoT: "noads.joindns4.eu",
+	},
+	{
+		ID: "dns-sb", Name: "DNS.SB", Category: CategoryPrivacy, Source: SourceBuiltin,
+		Description: "Privacy-first global anycast resolver with DNSSEC and zero query logging.",
+		IPv4:        []string{"185.222.222.222", "45.11.45.11"},
+		IPv6:        []string{"2a09::", "2a11::"},
+		DoH:         "https://doh.sb/dns-query", DoT: "dot.sb",
+	},
+	{
 		ID: "cleanbrowsing", Name: "CleanBrowsing Family", Category: CategoryFamily, Source: SourceBuiltin,
 		Description: "Family filter: blocks adult content and enforces SafeSearch.",
 		IPv4:        []string{"185.228.168.168", "185.228.169.168"},
 		IPv6:        []string{"2a0d:2a00:1::", "2a0d:2a00:2::"},
 		DoH:         "https://doh.cleanbrowsing.org/doh/family-filter/", DoT: "family-filter-dns.cleanbrowsing.org",
-	},
-	{
-		ID: "mullvad", Name: "Mullvad DNS", Category: CategoryPrivacy, Source: SourceBuiltin,
-		Description: "Encrypted-only (DoH/DoT) resolver. Mullvad announced the service's " +
-			"discontinuation in November 2026; kept for reference and excluded from recommendations.",
-		DoH: "https://dns.mullvad.net/dns-query", DoT: "dns.mullvad.net",
-		Deprecated: true,
 	},
 }
 
