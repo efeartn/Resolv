@@ -45,10 +45,14 @@ type querier interface {
 type udpQuerier struct {
 	addr    string
 	timeout time.Duration
+	client  *mdns.Client
 }
 
 func (q *udpQuerier) exchange(ctx context.Context, m *mdns.Msg) (*mdns.Msg, time.Duration, error) {
-	c := &mdns.Client{Net: "udp", Timeout: q.timeout, UDPSize: 1232}
+	c := q.client
+	if c == nil {
+		c = &mdns.Client{Net: "udp", Timeout: q.timeout, UDPSize: 1232}
+	}
 	start := time.Now()
 	r, _, err := c.ExchangeContext(ctx, m, q.addr)
 	rtt := time.Since(start)
@@ -178,9 +182,9 @@ func newDoHTransport(timeout time.Duration) *http.Transport {
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
 		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          64,
-		MaxIdleConnsPerHost:   4,
-		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConns:          32,
+		MaxIdleConnsPerHost:   2,
+		IdleConnTimeout:       45 * time.Second,
 		TLSHandshakeTimeout:   timeout,
 		ExpectContinueTimeout: time.Second,
 		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
@@ -188,7 +192,7 @@ func newDoHTransport(timeout time.Duration) *http.Transport {
 }
 
 func (q *dohQuerier) exchange(ctx context.Context, m *mdns.Msg) (*mdns.Msg, time.Duration, error) {
-	wire := m.Copy()
+	wire := *m
 	wire.Id = 0 // RFC 8484 §4.1: use ID 0 for cache friendliness
 	buf, err := wire.Pack()
 	if err != nil {
@@ -240,7 +244,11 @@ func newQuerier(r Resolver, p Protocol, timeout time.Duration, doh *http.Client)
 		}
 		addr := net.JoinHostPort(ip, "53")
 		if p == ProtoUDP {
-			return &udpQuerier{addr: addr, timeout: timeout}, nil
+			return &udpQuerier{
+				addr:    addr,
+				timeout: timeout,
+				client:  &mdns.Client{Net: "udp", Timeout: timeout, UDPSize: 1232},
+			}, nil
 		}
 		return &streamQuerier{addr: addr, timeout: timeout}, nil
 	case ProtoDoT:

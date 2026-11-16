@@ -21,25 +21,67 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// detectScript gathers every "Up" adapter with its addresses, default route,
-// DNS servers and whether DNS is static (registry NameServer value).
+// detectScript gathers every "Up" adapter using batched OS queries (minimizing
+// WMI/CIM round-trips on low-spec hardware) and falls back cleanly.
 const detectScript = `
 $ErrorActionPreference = 'SilentlyContinue'
 $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $os = [string](Get-CimInstance -ClassName Win32_OperatingSystem).Caption
-$adapters = @(Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
+
+$ip4Map = @{}
+$ip6Map = @{}
+foreach ($ip in @(Get-NetIPAddress)) {
+  $k = [int]$ip.InterfaceIndex
+  $addr = [string]$ip.IPAddress
+  if (-not $addr) { continue }
+  if ($ip.AddressFamily -eq 'IPv4' -or $ip.AddressFamily -eq 2) {
+    if (-not $ip4Map.ContainsKey($k)) { $ip4Map[$k] = [System.Collections.Generic.List[string]]::new() }
+    $ip4Map[$k].Add($addr)
+  } elseif (($ip.AddressFamily -eq 'IPv6' -or $ip.AddressFamily -eq 23) -and ($addr -notlike 'fe80*')) {
+    if (-not $ip6Map.ContainsKey($k)) { $ip6Map[$k] = [System.Collections.Generic.List[string]]::new() }
+    $ip6Map[$k].Add($addr)
+  }
+}
+
+$routeMap = @{}
+foreach ($rt in @(Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Sort-Object -Property RouteMetric)) {
+  $k = [int]$rt.InterfaceIndex
+  if (-not $routeMap.ContainsKey($k)) { $routeMap[$k] = $rt }
+}
+
+$ifMetricMap = @{}
+foreach ($ipif in @(Get-NetIPInterface -AddressFamily IPv4)) {
+  $ifMetricMap[[int]$ipif.InterfaceIndex] = [int]$ipif.InterfaceMetric
+}
+
+$dnsMap = @{}
+foreach ($d in @(Get-DnsClientServerAddress)) {
+  $k = [int]$d.InterfaceIndex
+  foreach ($s in @($d.ServerAddresses)) {
+    if ($s -and ($s -notlike 'fec0:*')) {
+      if (-not $dnsMap.ContainsKey($k)) { $dnsMap[$k] = [System.Collections.Generic.List[string]]::new() }
+      $dnsMap[$k].Add([string]$s)
+    }
+  }
+}
+
+[pscustomobject[]]$adapters = @(Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
   $a = $_
   $idx = [int]$a.ifIndex
-  $ip4 = @(Get-NetIPAddress -InterfaceIndex $idx -AddressFamily IPv4 | ForEach-Object { [string]$_.IPAddress } | Where-Object { $_ })
-  $ip6 = @(Get-NetIPAddress -InterfaceIndex $idx -AddressFamily IPv6 | Where-Object { $_.IPAddress -notlike 'fe80*' } | ForEach-Object { [string]$_.IPAddress })
-  $route = Get-NetRoute -InterfaceIndex $idx -DestinationPrefix '0.0.0.0/0' | Sort-Object -Property RouteMetric | Select-Object -First 1
-  $ipif = Get-NetIPInterface -InterfaceIndex $idx -AddressFamily IPv4
-  $dns = @(Get-DnsClientServerAddress -InterfaceIndex $idx | ForEach-Object { $_.ServerAddresses } | Where-Object { $_ -and ($_ -notlike 'fec0:*') } | ForEach-Object { [string]$_ })
-  $reg = Get-ItemProperty -Path ('HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\' + $a.InterfaceGuid)
+  $regPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\' + $a.InterfaceGuid
+  $reg = if (Test-Path $regPath) { Get-ItemProperty -Path $regPath } else { $null }
+  $rt = $routeMap[$idx]
   $gw = ''
   $metric = 9999
-  if ($route) { $gw = [string]$route.NextHop; $metric = [int]$route.RouteMetric + [int]$ipif.InterfaceMetric }
+  if ($rt) {
+    $gw = [string]$rt.NextHop
+    $ifM = if ($ifMetricMap.ContainsKey($idx)) { $ifMetricMap[$idx] } else { 0 }
+    $metric = [int]$rt.RouteMetric + $ifM
+  }
+  $v4 = $null; if ($ip4Map.ContainsKey($idx) -and $ip4Map[$idx].Count -gt 0) { $v4 = $ip4Map[$idx].ToArray() }
+  $v6 = $null; if ($ip6Map.ContainsKey($idx) -and $ip6Map[$idx].Count -gt 0) { $v6 = $ip6Map[$idx].ToArray() }
+  $dv = $null; if ($dnsMap.ContainsKey($idx) -and $dnsMap[$idx].Count -gt 0) { $dv = $dnsMap[$idx].ToArray() }
   [pscustomobject]@{
     Index       = $idx
     Name        = [string]$a.Name
@@ -48,31 +90,61 @@ $adapters = @(Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | ForEach-Obj
     Mac         = [string]$a.MacAddress
     Virtual     = [bool]$a.Virtual
     Hardware    = [bool]$a.HardwareInterface
-    IPv4        = $ip4
-    IPv6        = $ip6
+    IPv4        = $v4
+    IPv6        = $v6
     Gateway     = $gw
     Metric      = $metric
-    DNS         = $dns
-    StaticDNS   = [bool]([string]$reg.NameServer)
+    DNS         = $dv
+    StaticDNS   = if ($reg) { [bool]([string]$reg.NameServer) } else { $false }
   }
 })
 ConvertTo-Json -InputObject ([pscustomobject]@{ OS = $os; Adapters = $adapters }) -Depth 5 -Compress
 `
 
+// winStringSlice handles PowerShell 5.1 ConvertTo-Json quirks where a 0-element
+// array may become null/{} and a 1-element array may become a scalar JSON string.
+type winStringSlice []string
+
+func (s *winStringSlice) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" || trimmed == "{}" {
+		*s = nil
+		return nil
+	}
+	if strings.HasPrefix(trimmed, `"`) {
+		var single string
+		if err := json.Unmarshal(data, &single); err != nil {
+			return err
+		}
+		if single != "" {
+			*s = []string{single}
+		} else {
+			*s = nil
+		}
+		return nil
+	}
+	var list []string
+	if err := json.Unmarshal(data, &list); err != nil {
+		return err
+	}
+	*s = list
+	return nil
+}
+
 type winAdapter struct {
-	Index       int      `json:"Index"`
-	Name        string   `json:"Name"`
-	Description string   `json:"Description"`
-	MediaType   string   `json:"MediaType"`
-	Mac         string   `json:"Mac"`
-	Virtual     bool     `json:"Virtual"`
-	Hardware    bool     `json:"Hardware"`
-	IPv4        []string `json:"IPv4"`
-	IPv6        []string `json:"IPv6"`
-	Gateway     string   `json:"Gateway"`
-	Metric      int      `json:"Metric"`
-	DNS         []string `json:"DNS"`
-	StaticDNS   bool     `json:"StaticDNS"`
+	Index       int            `json:"Index"`
+	Name        string         `json:"Name"`
+	Description string         `json:"Description"`
+	MediaType   string         `json:"MediaType"`
+	Mac         string         `json:"Mac"`
+	Virtual     bool           `json:"Virtual"`
+	Hardware    bool           `json:"Hardware"`
+	IPv4        winStringSlice `json:"IPv4"`
+	IPv6        winStringSlice `json:"IPv6"`
+	Gateway     string         `json:"Gateway"`
+	Metric      int            `json:"Metric"`
+	DNS         winStringSlice `json:"DNS"`
+	StaticDNS   bool           `json:"StaticDNS"`
 }
 
 type winDetect struct {
@@ -131,10 +203,10 @@ func detect(ctx context.Context) (*Info, error) {
 			Device:    a.Description,
 			Kind:      guessKind(a.MediaType + " " + a.Name + " " + a.Description),
 			MAC:       strings.ReplaceAll(a.Mac, "-", ":"),
-			IPv4:      a.IPv4,
-			IPv6:      a.IPv6,
+			IPv4:      []string(a.IPv4),
+			IPv6:      []string(a.IPv6),
 			Gateway:   a.Gateway,
-			DNS:       a.DNS,
+			DNS:       []string(a.DNS),
 			DNSManual: a.StaticDNS,
 		}
 		// Hide disconnected/virtual noise (Hyper-V, VPN taps) unless it is all we have.
@@ -174,9 +246,26 @@ func applyDNS(ctx context.Context, iface *Adapter, servers []string) error {
 	if err != nil {
 		return err
 	}
-	return runPrivileged(ctx, fmt.Sprintf(
-		"Set-DnsClientServerAddress -InterfaceIndex %d -ServerAddresses @(%s)\nClear-DnsClientCache",
-		idx, psList(servers)))
+	v4 := make([]string, 0, len(servers))
+	v6 := make([]string, 0, len(servers))
+	for _, s := range servers {
+		if strings.Contains(s, ":") {
+			v6 = append(v6, s)
+		} else {
+			v4 = append(v4, s)
+		}
+	}
+	script := fmt.Sprintf(`if (Get-Command Set-DnsClientServerAddress -ErrorAction SilentlyContinue) {
+  Set-DnsClientServerAddress -InterfaceIndex %d -ServerAddresses @(%s)
+} else {
+  $name = (Get-CimInstance Win32_NetworkAdapter -Filter "InterfaceIndex=%d").NetConnectionID
+  $v4 = @(%s); $v6 = @(%s)
+  if ($v4.Count -gt 0) { & netsh.exe interface ipv4 set dns name="$name" static $v4[0] primary | Out-Null; for ($i=1; $i -lt $v4.Count; $i++) { & netsh.exe interface ipv4 add dns name="$name" $v4[$i] index=($i+1) | Out-Null } }
+  if ($v6.Count -gt 0) { & netsh.exe interface ipv6 set dnsservers name="$name" static $v6[0] primary | Out-Null; for ($i=1; $i -lt $v6.Count; $i++) { & netsh.exe interface ipv6 add dnsservers name="$name" $v6[$i] index=($i+1) | Out-Null } }
+}
+Clear-DnsClientCache -ErrorAction SilentlyContinue; & ipconfig.exe /flushdns | Out-Null`,
+		idx, psList(servers), idx, psList(v4), psList(v6))
+	return runPrivileged(ctx, script)
 }
 
 func resetDNS(ctx context.Context, iface *Adapter) error {
@@ -184,8 +273,15 @@ func resetDNS(ctx context.Context, iface *Adapter) error {
 	if err != nil {
 		return err
 	}
-	return runPrivileged(ctx, fmt.Sprintf(
-		"Set-DnsClientServerAddress -InterfaceIndex %d -ResetServerAddresses\nClear-DnsClientCache", idx))
+	script := fmt.Sprintf(`if (Get-Command Set-DnsClientServerAddress -ErrorAction SilentlyContinue) {
+  Set-DnsClientServerAddress -InterfaceIndex %d -ResetServerAddresses
+} else {
+  $name = (Get-CimInstance Win32_NetworkAdapter -Filter "InterfaceIndex=%d").NetConnectionID
+  & netsh.exe interface ipv4 set dns name="$name" dhcp | Out-Null
+  & netsh.exe interface ipv6 set dnsservers name="$name" dhcp | Out-Null
+}
+Clear-DnsClientCache -ErrorAction SilentlyContinue; & ipconfig.exe /flushdns | Out-Null`, idx, idx)
+	return runPrivileged(ctx, script)
 }
 
 func flushCache(ctx context.Context) error {

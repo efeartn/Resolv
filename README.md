@@ -84,7 +84,7 @@ Standalone binaries are automatically compiled and published by GitHub Actions o
 
 </details>
 
-> **What's New in [`v1.1.1`](https://github.com/efeartn/Resolv/releases/tag/v1.1.1):** Audited all built-in DNS providers live, removed shut-down Mullvad Public DNS, added **DNS4EU** (`Protective`, `Unfiltered`, `AdBlock`), **Quad9 ECS**, **OpenDNS FamilyShield**, and **DNS.SB**, fixed Control D Pro DoT fallback, and includes the `v1.1.0` SHA-256 auto-updater, streaming rows, and persistent history. See [CHANGELOG.md](./CHANGELOG.md).
+> **What's New in [`v1.2.0`](https://github.com/efeartn/Resolv/releases/tag/v1.2.0):** Redesigned **Precision Dark Instrument** UI with 100% offline static CSS (removing external Tailwind CDN script completely), lower RAM/CPU footprint (`64 MiB` Go heap limit, reused HTTP/2 & UDP queriers, active-tab-only live DOM rendering, clean `%LocalAppData%\Resolv\WebView2` portable cache path), **Quick / Standard / Deep** depth presets, and one-click **IPv4 / IPv6 / DoH / DoT** endpoint copy chips. See [CHANGELOG.md](./CHANGELOG.md).
 
 ---
 
@@ -182,9 +182,9 @@ Resolv/
 │   └── appicon.png                 # 512×512 PNG application icon
 ├── docs/screenshots/               # UI screenshots for Simple & Pro views
 ├── frontend/
-│   ├── index.html                  # Progressive disclosure Simple & Pro UI
-│   ├── styles.css                  # Minimalist zinc/slate dark theme & latency badges
-│   ├── app.js                      # State manager, pure SVG range-bars & sparklines
+│   ├── index.html                  # Precision Dark Instrument Simple & Pro UI (100% offline)
+│   ├── styles.css                  # Self-contained static CSS theme (zero CDN JS runtime)
+│   ├── app.js                      # State manager, pure SVG range-bars, sparklines & copy chips
 │   └── icon.svg                    # Header & modal vector icon
 └── internal/
     ├── config/

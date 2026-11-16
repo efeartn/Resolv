@@ -3,6 +3,29 @@
 All notable changes to **Resolv** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.2.0] - 2026-11-16
+
+### Changed & Redesigned
+- **Precision Dark Instrument UI (100% Offline, Zero-CDN Static CSS):**
+  - Replaced the external `cdn.tailwindcss.com` runtime JavaScript compiler (~400 KB + DOM `MutationObserver`) with a self-contained 27 KB static design system in `frontend/styles.css`. Resolv now renders instantaneously on air-gapped networks, captive portals, or broken-DNS computers with significantly lower WebView RAM and CPU usage.
+  - Redesigned the interface around matte obsidian hairline surfaces, tabular monospaced numeric columns (`tabular-nums`), crisp inline SVG status icons (replacing OS-inconsistent Unicode emojis), non-pulsing live progress tracks, and matte modal backdrops (removing expensive GPU `backdrop-blur` passes).
+  - Kept every feature intact across Simple View, Pro Telemetry, History, Settings, Updater, Custom DNS, Export, and About modals.
+
+### Added
+- **Hero Depth Presets (`Quick` / `Standard` / `Deep`):** Select `5`, `10`, or `20` queries per domain directly from the main command console, synced automatically with Pro Telemetry options and persistent Settings.
+- **One-Click IPv4, IPv6, DoH & DoT Quick-Copy Chips:** Expanded resolver drawers and the Endpoint Setup modal now include dedicated one-click copy controls for IPv4, IPv6, DoH URL, DoT hostname, and elevated CLI commands.
+
+### Optimized & Fixed
+- **Zero-Clutter Portable Windows Profile & Broad PC Compatibility:**
+  - Redirected Windows WebView2 user-data storage (`WebviewUserDataPath`) to `%LocalAppData%\Resolv\WebView2`, preventing portable `.exe` runs from leaving `.WebView2` folders next to Downloads/Desktop binaries.
+  - Enabled `WebviewDisableRendererCodeIntegrity` and disabled accidental zoom (`DisablePinchZoom`, `IsZoomControlEnabled: false`) with dark native window frame matching for maximum compatibility across Windows PCs and third-party overlays.
+  - Added batched PowerShell adapter detection with resilient `winStringSlice` JSON decoding (fixing single-IP / zero-IPv6 adapter parsing quirks on PowerShell 5.1) plus automatic `netsh` fallback when `Set-DnsClientServerAddress` is unavailable, and `ip -4` IPv4 detection fallback on non-NetworkManager Linux systems.
+- **Lower Go & Frontend Memory/CPU Overhead:**
+  - Added `64 MiB` Go soft heap cap (`debug.SetMemoryLimit`) and post-run `debug.FreeOSMemory()`, pre-sized job queues, reused persistent `mdns.Client` instances across UDP queries, eliminated shallow-slice deep copies on DoH requests, and reused Phase 2 connections for Phase 3 DNSSEC/AdBlock/Hijack probes.
+  - Stopped rebuilding the hidden tab (`Simple` or `Pro`) during live benchmark streaming ticks (`renderTablesOnly()` now renders only the active view).
+
+---
+
 ## [v1.1.1] - 2026-11-13
 
 ### Removed

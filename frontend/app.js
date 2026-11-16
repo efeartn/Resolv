@@ -6,7 +6,7 @@
 
   // Application UI State
   const state = {
-    version: '1.1.1',
+    version: '1.2.0',
     mode: 'simple',            // 'simple' | 'pro'
     categoryFilter: 'all',     // 'all' | 'Privacy' | 'Ad-blocking' | 'Standard' | 'Family' | 'Custom'
     searchQuery: '',           // free-text filter
@@ -33,7 +33,7 @@
         staggerMs: 12,
         protocols: ['udp', 'doh'],
         cachedDomains: ['cloudflare.com', 'google.com', 'apple.com'],
-        uncachedBase: 'resbench.invalid',
+        uncachedBase: 'example.com',
         checkIntegrity: true
       }
     },
@@ -44,7 +44,7 @@
       staggerMs: 12,
       protocols: ['udp', 'doh'],
       cachedDomains: ['cloudflare.com', 'google.com', 'apple.com'],
-      uncachedBase: 'resbench.invalid',
+      uncachedBase: 'example.com',
       checkIntegrity: true
     },
     currentExportFormat: 'md'
@@ -150,6 +150,35 @@
       .replace(/"/g, '&quot;');
   }
 
+  async function copyText(text, successMsg) {
+    const val = String(text ?? '');
+    if (!val) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(val);
+      } else {
+        throw new Error('fallback');
+      }
+    } catch (_) {
+      const ta = document.createElement('textarea');
+      ta.value = val;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (_) {}
+      document.body.removeChild(ta);
+    }
+    if (successMsg) showToast(successMsg, 'success');
+  }
+
+  // Uniform Inline Vector Icons (consistent across Windows/macOS/Linux without OS emojis)
+  const SVG_CHECK = '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  const SVG_SHIELD = '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
+  const SVG_WARN = '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+  const SVG_COPY = '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  const SVG_CHEVRON = '<svg class="w-3.5 h-3.5 shrink-0 chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+
   // Latency Tier Styling (<20ms Emerald, 20-60ms Amber, >60ms Rose)
   function latencyBadgeClass(ms, failed = false) {
     if (failed || ms === undefined || ms === null || ms <= 0) return 'badge-neutral';
@@ -159,7 +188,7 @@
   }
 
   function latencyHexColor(ms, failed = false) {
-    if (failed || !ms || ms <= 0) return '#52525b';
+    if (failed || !ms || ms <= 0) return '#4b5563';
     if (ms < 20) return '#10b981';
     if (ms <= 60) return '#f59e0b';
     return '#f43f5e';
@@ -169,7 +198,7 @@
   function renderRangeBarSVG(overall, maxScaleMs, width = 240, height = 22) {
     if (!overall || !overall.received || overall.received <= 0) {
       return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" class="block">
-        <line x1="6" y1="${height / 2}" x2="${width - 6}" y2="${height / 2}" stroke="#27272a" stroke-width="2" stroke-linecap="round"/>
+        <line x1="6" y1="${height / 2}" x2="${width - 6}" y2="${height / 2}" stroke="#1f2432" stroke-width="2" stroke-linecap="round"/>
       </svg>`;
     }
     const pad = 8;
@@ -187,18 +216,13 @@
     return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" class="block" role="img"
       aria-label="Min ${overall.minMs.toFixed(1)}ms, Avg ${overall.avgMs.toFixed(1)}ms, P95 ${(overall.p95Ms || overall.maxMs).toFixed(1)}ms, Max ${overall.maxMs.toFixed(1)}ms">
       <title>Min ${overall.minMs.toFixed(1)} ms · Avg ${overall.avgMs.toFixed(1)} ms · P95 ${(overall.p95Ms || overall.maxMs).toFixed(1)} ms · Max ${overall.maxMs.toFixed(1)} ms</title>
-      <!-- Baseline Track -->
-      <line x1="${pad}" y1="${cy}" x2="${width - pad}" y2="${cy}" stroke="#1f1f23" stroke-width="2"/>
-      <!-- Full Min..Max Whisker Span -->
-      <line x1="${xMin.toFixed(1)}" y1="${cy}" x2="${xMax.toFixed(1)}" y2="${cy}" stroke="#3f3f46" stroke-width="2"/>
-      <line x1="${xMin.toFixed(1)}" y1="${cy - 4}" x2="${xMin.toFixed(1)}" y2="${cy + 4}" stroke="#52525b" stroke-width="1.5"/>
-      <line x1="${xMax.toFixed(1)}" y1="${cy - 4}" x2="${xMax.toFixed(1)}" y2="${cy + 4}" stroke="#52525b" stroke-width="1.5"/>
-      <!-- Min..P95 Core Band -->
-      <rect x="${xMin.toFixed(1)}" y="${cy - 2.5}" width="${Math.max(2, xP95 - xMin).toFixed(1)}" height="5" rx="2" fill="${color}" fill-opacity="0.35"/>
-      <!-- P95 Tick -->
+      <line x1="${pad}" y1="${cy}" x2="${width - pad}" y2="${cy}" stroke="#1a1e2a" stroke-width="2"/>
+      <line x1="${xMin.toFixed(1)}" y1="${cy}" x2="${xMax.toFixed(1)}" y2="${cy}" stroke="#394156" stroke-width="2"/>
+      <line x1="${xMin.toFixed(1)}" y1="${cy - 4}" x2="${xMin.toFixed(1)}" y2="${cy + 4}" stroke="#59637a" stroke-width="1.5"/>
+      <line x1="${xMax.toFixed(1)}" y1="${cy - 4}" x2="${xMax.toFixed(1)}" y2="${cy + 4}" stroke="#59637a" stroke-width="1.5"/>
+      <rect x="${xMin.toFixed(1)}" y="${cy - 2.5}" width="${Math.max(2, xP95 - xMin).toFixed(1)}" height="5" rx="2" fill="${color}" fill-opacity="0.34"/>
       <line x1="${xP95.toFixed(1)}" y1="${cy - 5}" x2="${xP95.toFixed(1)}" y2="${cy + 5}" stroke="${color}" stroke-width="1.5"/>
-      <!-- Avg Marker Dot -->
-      <circle cx="${xAvg.toFixed(1)}" cy="${cy}" r="4" fill="#09090b" stroke="${color}" stroke-width="2.2"/>
+      <circle cx="${xAvg.toFixed(1)}" cy="${cy}" r="4" fill="#090a0e" stroke="${color}" stroke-width="2.2"/>
     </svg>`;
   }
 
@@ -206,7 +230,7 @@
   function renderSparklineSVG(samples, avgMs, width = 128, height = 24) {
     if (!Array.isArray(samples) || samples.length < 2) {
       return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="block">
-        <line x1="2" y1="${height / 2}" x2="${width - 2}" y2="${height / 2}" stroke="#27272a" stroke-width="1.5" stroke-dasharray="2 3"/>
+        <line x1="2" y1="${height / 2}" x2="${width - 2}" y2="${height / 2}" stroke="#1f2432" stroke-width="1.5" stroke-dasharray="2 3"/>
       </svg>`;
     }
     const min = Math.min(...samples);
@@ -237,17 +261,17 @@
 
   function categoryBadgeHTML(cat, deprecated = false) {
     const map = {
-      'Privacy': 'bg-cyan-950/60 border-cyan-800/60 text-cyan-300',
-      'Ad-blocking': 'bg-purple-950/60 border-purple-800/60 text-purple-300',
-      'Standard': 'bg-zinc-800/80 border-zinc-700 text-zinc-300',
-      'Family': 'bg-amber-950/60 border-amber-800/60 text-amber-300',
-      'System': 'bg-emerald-950/60 border-emerald-800/60 text-emerald-300',
-      'Custom': 'bg-indigo-950/60 border-indigo-800/60 text-indigo-300'
+      'Privacy': 'cat-privacy',
+      'Ad-blocking': 'cat-adblock',
+      'Standard': 'cat-standard',
+      'Family': 'cat-family',
+      'System': 'cat-system',
+      'Custom': 'cat-custom'
     };
-    const cls = map[cat] || map['Standard'];
-    let html = `<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border ${cls}">${escapeHTML(cat)}</span>`;
+    const cls = map[cat] || 'cat-standard';
+    let html = `<span class="badge-pill font-mono ${cls}">${escapeHTML(cat)}</span>`;
     if (deprecated) {
-      html += ` <span class="text-[10px] font-mono px-1.5 py-0.5 rounded border bg-amber-950/70 border-amber-800/70 text-amber-300" title="Discontinued endpoint">Deprecated</span>`;
+      html += ` <span class="badge-pill font-mono badge-amber" title="Discontinued endpoint">Deprecated</span>`;
     }
     return html;
   }
@@ -255,48 +279,48 @@
   function dnssecBadgeHTML(dnssec) {
     switch (dnssec) {
       case 'validating':
-        return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300" title="Resolver validates DNSSEC signatures and rejects bogus responses">✓ DNSSEC</span>`;
+        return `<span class="badge-pill badge-emerald font-mono" title="Resolver validates DNSSEC signatures and rejects bogus responses">${SVG_CHECK}<span>DNSSEC</span></span>`;
       case 'not-validating':
-        return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/60 border border-amber-800/60 text-amber-300" title="Resolver did not reject broken DNSSEC signatures">No DNSSEC</span>`;
+        return `<span class="badge-pill badge-amber font-mono" title="Resolver did not reject broken DNSSEC signatures">No DNSSEC</span>`;
       case 'partial':
-        return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">Partial</span>`;
+        return `<span class="badge-pill badge-neutral font-mono">Partial</span>`;
       default:
-        return `<span class="text-[10px] font-mono text-zinc-500">—</span>`;
+        return `<span class="text-micro font-mono text-muted">—</span>`;
     }
   }
 
   function adBlockBadgeHTML(filtering) {
     if (!filtering || !filtering.checked) {
-      return `<span class="text-[10px] font-mono text-zinc-500">—</span>`;
+      return `<span class="text-micro font-mono text-muted">—</span>`;
     }
     if (filtering.blocksAds) {
-      return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-950/60 border border-purple-800/60 text-purple-300" title="Sinkholed ${filtering.blockedCount}/${filtering.testedCount} ad/tracker canary domains (${escapeHTML(filtering.method || 'sinkhole')})">🛡 ${filtering.blockedCount}/${filtering.testedCount} Ads</span>`;
+      return `<span class="badge-pill badge-purple font-mono" title="Sinkholed ${filtering.blockedCount}/${filtering.testedCount} ad/tracker canary domains (${escapeHTML(filtering.method || 'sinkhole')})">${SVG_SHIELD}<span>${filtering.blockedCount}/${filtering.testedCount} Ads</span></span>`;
     }
-    return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400" title="Does not filter ad/tracker domains">Unfiltered</span>`;
+    return `<span class="badge-pill badge-neutral font-mono" title="Does not filter ad/tracker domains">Unfiltered</span>`;
   }
 
   function hijackBadgeHTML(hijack) {
     if (!hijack || !hijack.status || hijack.status === 'unknown') {
-      return `<span class="text-[10px] font-mono text-zinc-500">—</span>`;
+      return `<span class="text-micro font-mono text-muted">—</span>`;
     }
     if (hijack.status === 'clean') {
-      return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300" title="Plain DNS matches encrypted DoH responses">✓ Verified</span>`;
+      return `<span class="badge-pill badge-emerald font-mono" title="Plain DNS matches encrypted DoH responses">${SVG_CHECK}<span>Verified</span></span>`;
     }
     if (hijack.status === 'suspicious') {
-      return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/70 border border-amber-700/70 text-amber-300">⚠ Suspicious</span>`;
+      return `<span class="badge-pill badge-amber font-mono">${SVG_WARN}<span>Suspicious</span></span>`;
     }
-    return `<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-rose-950/80 border border-rose-700 text-rose-200 font-semibold">⚠ Hijacked</span>`;
+    return `<span class="badge-pill badge-rose font-mono font-semibold">${SVG_WARN}<span>Hijacked</span></span>`;
   }
 
   function showToast(message, kind = 'info') {
     const el = $('statusToast');
     const txt = $('statusToastText');
     const styles = {
-      success: 'bg-emerald-950/60 border-emerald-800/80 text-emerald-200',
-      error: 'bg-rose-950/60 border-rose-800/80 text-rose-200',
-      info: 'bg-zinc-900 border-zinc-800 text-zinc-200'
+      success: 'toast-banner toast-success px-4 py-3 text-xs flex items-center justify-between gap-3',
+      error: 'toast-banner toast-error px-4 py-3 text-xs flex items-center justify-between gap-3',
+      info: 'toast-banner toast-info px-4 py-3 text-xs flex items-center justify-between gap-3'
     };
-    el.className = `rounded-xl border px-4 py-3 text-xs flex items-center justify-between gap-3 ${styles[kind] || styles.info}`;
+    el.className = styles[kind] || styles.info;
     txt.textContent = message;
     el.classList.remove('hidden');
   }
@@ -372,7 +396,7 @@
     } else if (v.improvementPct && v.improvementPct <= -5) {
       deltaText = ` (+${Math.round(-v.improvementPct)}%)`;
     }
-    el.className = `${cls} font-mono text-[10px] px-1.5 py-0.5 rounded`;
+    el.className = `${cls} badge-tiny font-mono`;
     el.textContent = `${v.avgMs.toFixed(1)} ms${deltaText}`;
     el.title = v.message || 'Verified live DNS speed';
     el.classList.remove('hidden');
@@ -420,8 +444,8 @@
       }
       $('kpiSecurityVal').textContent = `${dnssecCount}/${validResults.length} DNSSEC · ${adBlockCount} AdBlock`;
       $('kpiSecuritySub').textContent = report.network && report.network.intercepted
-        ? '⚠ Port 53 Intercepted'
-        : '✓ Port 53 Unmodified';
+        ? 'Port 53 Intercepted'
+        : 'Port 53 Unmodified';
     }
 
     if (report.network && (report.network.intercepted || report.network.hijackedCount > 0)) {
@@ -500,13 +524,16 @@
   function renderTablesOnly() {
     const items = getDisplayItems();
     let maxCeiling = 80;
-    items.forEach((item) => {
-      if (item.overall && item.overall.maxMs > maxCeiling) {
-        maxCeiling = item.overall.maxMs;
-      }
-    });
-    renderSimpleList(items, maxCeiling);
-    renderProTable(items, maxCeiling);
+    for (let i = 0; i < items.length; i++) {
+      const o = items[i].overall;
+      if (o && o.maxMs > maxCeiling) maxCeiling = o.maxMs;
+    }
+    // Render only the visible view to eliminate hidden DOM rebuilds during live updates.
+    if (state.mode === 'pro') {
+      renderProTable(items, maxCeiling);
+    } else {
+      renderSimpleList(items, maxCeiling);
+    }
   }
 
   function renderResults() {
@@ -517,7 +544,7 @@
   function renderSimpleList(items, maxCeiling) {
     const container = $('simpleListContainer');
     if (items.length === 0) {
-      container.innerHTML = `<div class="rounded-xl bg-[#121215] border border-zinc-800/80 p-8 text-center text-xs text-zinc-400">No resolvers match the selected category filter.</div>`;
+      container.innerHTML = `<div class="panel p-8 text-center text-xs text-secondary">No resolvers match the selected category filter.</div>`;
       return;
     }
 
@@ -526,34 +553,33 @@
       const isSkipped = item.status === 'skipped';
       const isFailed = item.status === 'failed';
       const isPending = item.status === 'pending' || (!isSkipped && !isFailed && (!item.overall || item.overall.received === 0));
+      const isTopWinner = !isPending && !isFailed && !isSkipped && item.rank === 1;
       const avg = item.overall ? item.overall.avgMs : 0;
       const expanded = state.expandedIds.has(r.id);
       const endpoint = (r.ipv4 && r.ipv4.length > 0)
         ? r.ipv4.join(', ')
         : (r.doh || r.dot || '—');
       const canApply = Array.isArray(r.ipv4) && r.ipv4.length > 0 && !r.deprecated;
+      const rankLabel = isSkipped ? '—' : isPending ? '·' : String(item.rank).padStart(2, '0');
 
       return `
-      <div class="resolver-card rounded-xl bg-[#121215] border border-zinc-800/90 overflow-hidden ${isSkipped ? 'opacity-65' : ''}">
-        <!-- Main Row -->
+      <div class="resolver-card ${isTopWinner ? 'is-winner' : ''} ${expanded ? 'is-expanded' : ''} ${isSkipped ? 'opacity-65' : ''}">
         <div class="px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 cursor-pointer" data-toggle-row="${escapeHTML(r.id)}">
-          <!-- Left: Rank + Name + Badges -->
           <div class="flex items-center gap-3 min-w-0 md:w-[36%]">
-            <div class="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center font-mono text-xs text-zinc-400 shrink-0">
-              ${isSkipped ? '—' : isPending ? '·' : `#${item.rank}`}
+            <div class="row-rank font-mono ${isTopWinner ? 'is-first' : ''}">
+              ${rankLabel}
             </div>
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-1.5">
-                <span class="font-semibold text-sm text-zinc-100 truncate">${escapeHTML(r.name)}</span>
+                <span class="font-semibold text-sm text-primary truncate">${escapeHTML(r.name)}</span>
                 ${categoryBadgeHTML(r.category, r.deprecated)}
                 ${item.filtering && item.filtering.blocksAds ? adBlockBadgeHTML(item.filtering) : ''}
                 ${item.hijack && item.hijack.status === 'hijacked' ? hijackBadgeHTML(item.hijack) : ''}
               </div>
-              <div class="mt-0.5 text-[11px] font-mono text-zinc-400 truncate">${escapeHTML(endpoint)}</div>
+              <div class="mt-0.5 text-[11px] font-mono text-secondary truncate">${escapeHTML(endpoint)}</div>
             </div>
           </div>
 
-          <!-- Center: Pure SVG Min–Avg–P95–Max Range Bar + Sparkline -->
           <div class="flex-1 flex items-center gap-3">
             <div class="flex-1">
               ${renderRangeBarSVG(isSkipped || isPending || isFailed ? null : item.overall, maxCeiling, 280, 22)}
@@ -564,43 +590,34 @@
             }
           </div>
 
-          <!-- Right: Avg ms Badge + One-Click Actions -->
           <div class="flex items-center justify-end gap-2 shrink-0" onclick="event.stopPropagation()">
             ${isSkipped
-              ? `<span class="badge-neutral text-xs font-mono px-2.5 py-1 rounded-md" title="No endpoint matches selected transport protocols">Skipped</span>`
+              ? `<span class="badge-pill badge-neutral font-mono" title="No endpoint matches selected transport protocols">Skipped</span>`
               : isPending
-                ? `<span class="badge-neutral text-xs font-mono px-2.5 py-1 rounded-md">${state.running ? 'Testing…' : 'Ready'}</span>`
+                ? `<span class="badge-pill badge-neutral font-mono">${state.running ? 'Testing…' : 'Ready'}</span>`
                 : isFailed
-                  ? `<span class="badge-rose text-xs font-mono px-2.5 py-1 rounded-md">Unreachable</span>`
-                  : `<span class="${latencyBadgeClass(avg)} text-xs font-mono font-semibold px-2.5 py-1 rounded-md" title="P95: ${(item.overall.p95Ms || avg).toFixed(1)} ms">${avg.toFixed(1)} ms</span>`
+                  ? `<span class="badge-pill badge-rose font-mono">Unreachable</span>`
+                  : `<span class="badge-latency ${latencyBadgeClass(avg)} font-mono font-semibold" title="P95: ${(item.overall.p95Ms || avg).toFixed(1)} ms">${avg.toFixed(1)} ms</span>`
             }
 
             ${canApply
-              ? `<button type="button" data-apply-resolver="${escapeHTML(r.id)}"
-                  class="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-emerald-500 hover:text-zinc-950 border border-zinc-700 hover:border-emerald-400 text-xs font-medium text-zinc-200 transition">
-                  Apply
-                </button>`
-              : `<button type="button" data-copy-resolver="${escapeHTML(r.id)}"
-                  class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-mono text-zinc-400">
-                  DoH Only
-                </button>`
+              ? `<button type="button" data-apply-resolver="${escapeHTML(r.id)}" class="btn-apply">Apply</button>`
+              : `<button type="button" data-copy-resolver="${escapeHTML(r.id)}" class="btn-chip font-mono">Endpoints</button>`
             }
 
             ${r.source === 'custom'
-              ? `<button type="button" data-remove-custom="${escapeHTML(r.id)}" title="Remove custom resolver"
-                  class="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950 border border-zinc-800 text-zinc-400 hover:text-rose-300 text-xs">✕</button>`
+              ? `<button type="button" data-remove-custom="${escapeHTML(r.id)}" title="Remove custom resolver" class="btn-remove">✕</button>`
               : ''
             }
 
-            <button type="button" data-toggle-row="${escapeHTML(r.id)}" title="Inspect protocol telemetry"
-              class="p-1.5 rounded-lg bg-zinc-900/70 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-mono">
-              ${expanded ? '▲' : '▼'}
+            <button type="button" data-toggle-row="${escapeHTML(r.id)}" title="Inspect protocol telemetry &amp; endpoints"
+              class="btn-expand ${expanded ? 'is-open' : ''}">
+              ${SVG_CHEVRON}
             </button>
           </div>
         </div>
 
-        <!-- Progressive Disclosure Expandable Telemetry Drawer -->
-        <div class="${expanded ? '' : 'hidden'} border-t border-zinc-800/80 bg-zinc-950/60 px-4 py-3.5 text-xs">
+        <div class="${expanded ? '' : 'hidden'} drawer-panel px-4 py-3.5 text-xs">
           ${renderExpandedTelemetry(item)}
         </div>
       </div>`;
@@ -619,80 +636,99 @@
       const pr = protos[p];
       const label = p.toUpperCase();
       if (!pr) {
-        return `<div class="rounded-lg bg-zinc-900/60 border border-zinc-800/70 p-2.5">
-          <div class="font-mono text-[10px] uppercase text-zinc-500">${label}</div>
-          <div class="mt-1 font-mono text-xs text-zinc-500">Not tested</div>
+        return `<div class="proto-tile proto-tile-empty p-2.5">
+          <div class="font-mono text-micro uppercase text-muted">${label}</div>
+          <div class="mt-1 font-mono text-xs text-muted">Not tested</div>
         </div>`;
       }
       const ok = pr.combined && pr.combined.received > 0;
-      return `<div class="rounded-lg bg-zinc-900/80 border border-zinc-800 p-2.5">
+      return `<div class="proto-tile p-2.5">
         <div class="flex items-center justify-between">
-          <span class="font-mono text-[10px] uppercase text-zinc-400">${label}</span>
-          <span class="font-mono text-[10px] text-zinc-500 truncate max-w-[150px]" title="${escapeHTML(pr.endpoint)}">${escapeHTML(pr.endpoint || '')}</span>
+          <span class="font-mono text-micro uppercase text-secondary">${label}</span>
+          <span class="font-mono text-[10px] text-muted truncate max-w-[150px]" title="${escapeHTML(pr.endpoint)}">${escapeHTML(pr.endpoint || '')}</span>
         </div>
         <div class="mt-1 flex items-center justify-between gap-2">
-          <span class="font-mono text-sm font-semibold ${ok ? 'text-zinc-100' : 'text-rose-300'}">
+          <span class="font-mono text-sm font-semibold ${ok ? 'text-primary' : 'text-rose-soft'}">
             ${ok ? `${pr.combined.avgMs.toFixed(2)} ms` : escapeHTML(pr.error || 'Failed')}
           </span>
           ${ok && pr.combined.samples ? renderSparklineSVG(pr.combined.samples, pr.combined.avgMs, 76, 18) : ''}
         </div>
-        <div class="mt-0.5 font-mono text-[11px] text-zinc-400">
+        <div class="mt-0.5 font-mono text-[11px] text-secondary">
           Cached ${fmtStat(pr.cached)} · Uncached ${fmtStat(pr.uncached)} · P95 ${ok ? (pr.combined.p95Ms || pr.combined.maxMs).toFixed(1) + 'ms' : '—'}
         </div>
       </div>`;
     }).join('');
 
+    const endpointChips = [];
+    if (r.ipv4 && r.ipv4.length > 0) {
+      const v4 = r.ipv4.join(', ');
+      endpointChips.push(`<button type="button" data-copy-value="${escapeHTML(v4)}" data-copy-label="IPv4" class="endpoint-chip font-mono" title="Copy IPv4: ${escapeHTML(v4)}">${SVG_COPY}<span>IPv4: ${escapeHTML(v4)}</span></button>`);
+    }
+    if (r.ipv6 && r.ipv6.length > 0) {
+      const v6 = r.ipv6.join(', ');
+      endpointChips.push(`<button type="button" data-copy-value="${escapeHTML(v6)}" data-copy-label="IPv6" class="endpoint-chip font-mono" title="Copy IPv6: ${escapeHTML(v6)}">${SVG_COPY}<span>IPv6</span></button>`);
+    }
+    if (r.doh) {
+      endpointChips.push(`<button type="button" data-copy-value="${escapeHTML(r.doh)}" data-copy-label="DoH URL" class="endpoint-chip font-mono" title="Copy DoH URL: ${escapeHTML(r.doh)}">${SVG_COPY}<span>DoH URL</span></button>`);
+    }
+    if (r.dot) {
+      endpointChips.push(`<button type="button" data-copy-value="${escapeHTML(r.dot)}" data-copy-label="DoT Host" class="endpoint-chip font-mono" title="Copy DoT Host: ${escapeHTML(r.dot)}">${SVG_COPY}<span>DoT: ${escapeHTML(r.dot)}</span></button>`);
+    }
+
     const findings = (item.hijack && Array.isArray(item.hijack.findings) && item.hijack.findings.length > 0)
-      ? `<ul class="mt-2 list-disc list-inside space-y-1 text-[11px] text-zinc-300">${item.hijack.findings.map((f) => `<li>${escapeHTML(f)}</li>`).join('')}</ul>`
+      ? `<ul class="mt-2 list-disc list-inside space-y-1 text-[11px] text-secondary">${item.hijack.findings.map((f) => `<li>${escapeHTML(f)}</li>`).join('')}</ul>`
       : '';
 
     return `
-      <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-zinc-800/70">
-        <div class="text-zinc-300">${escapeHTML(r.description || 'Custom or system DNS resolver.')}</div>
-        <div class="flex flex-wrap items-center gap-2">
+      <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-bottom-hairline">
+        <div class="text-secondary">${escapeHTML(r.description || 'Custom or system DNS resolver.')}</div>
+        <div class="flex flex-wrap items-center gap-1.5">
           ${dnssecBadgeHTML(item.dnssec)}
           ${adBlockBadgeHTML(item.filtering)}
           ${hijackBadgeHTML(item.hijack)}
-          <button type="button" data-copy-resolver="${escapeHTML(r.id)}"
-            class="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 font-mono text-[11px] text-emerald-300">
-            Copy DNS / Manual Command
-          </button>
         </div>
       </div>
 
+      <div class="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-1.5">${endpointChips.join('')}</div>
+        <button type="button" data-copy-resolver="${escapeHTML(r.id)}" class="btn-chip-accent font-mono">
+          Manual / CLI Setup
+        </button>
+      </div>
+
       ${item.status === 'skipped'
-        ? `<div class="mt-3 rounded-lg bg-zinc-900/60 border border-zinc-800 px-3 py-2 text-zinc-400 font-mono">Skipped in this test run — no endpoints match your currently enabled transport protocols (e.g., encrypted-only DoH/DoT resolver while testing UDP).</div>`
+        ? `<div class="mt-3 subtile px-3 py-2 text-secondary font-mono">Skipped in this test run — no endpoints match your currently enabled transport protocols (e.g., encrypted-only DoH/DoT resolver while testing UDP).</div>`
         : (o && (o.sent > 0 || o.received > 0) ? `
       <div class="grid grid-cols-2 sm:grid-cols-6 gap-2.5 mt-3">
-        <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 p-2.5">
-          <div class="text-[10px] font-mono uppercase text-zinc-400">Cached Avg</div>
-          <div class="mt-0.5 font-mono text-sm font-semibold text-emerald-300">${fmtStat(c)}</div>
-          <div class="text-[10px] text-zinc-500">Edge cache hit</div>
+        <div class="metric-tile p-2.5">
+          <div class="text-micro font-mono uppercase">Cached Avg</div>
+          <div class="mt-0.5 font-mono text-sm font-semibold text-emerald">${fmtStat(c)}</div>
+          <div class="text-[10px] text-muted">Edge cache hit</div>
         </div>
-        <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 p-2.5">
-          <div class="text-[10px] font-mono uppercase text-zinc-400">Uncached Avg</div>
-          <div class="mt-0.5 font-mono text-sm font-semibold text-cyan-300">${fmtStat(u)}</div>
-          <div class="text-[10px] text-zinc-500">UUID recursive</div>
+        <div class="metric-tile p-2.5">
+          <div class="text-micro font-mono uppercase">Uncached Avg</div>
+          <div class="mt-0.5 font-mono text-sm font-semibold text-cyan">${fmtStat(u)}</div>
+          <div class="text-[10px] text-muted">UUID recursive</div>
         </div>
-        <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 p-2.5">
-          <div class="text-[10px] font-mono uppercase text-zinc-400">P95 / Median</div>
-          <div class="mt-0.5 font-mono text-sm font-semibold text-zinc-100">${(o.p95Ms || o.maxMs).toFixed(1)} / ${o.medianMs.toFixed(1)} ms</div>
-          <div class="text-[10px] text-zinc-500">Min ${o.minMs.toFixed(1)} · Max ${o.maxMs.toFixed(1)} ms</div>
+        <div class="metric-tile p-2.5">
+          <div class="text-micro font-mono uppercase">P95 / Median</div>
+          <div class="mt-0.5 font-mono text-sm font-semibold text-primary">${(o.p95Ms || o.maxMs).toFixed(1)} / ${o.medianMs.toFixed(1)} ms</div>
+          <div class="text-[10px] text-muted">Min ${o.minMs.toFixed(1)} · Max ${o.maxMs.toFixed(1)} ms</div>
         </div>
-        <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 p-2.5">
-          <div class="text-[10px] font-mono uppercase text-zinc-400">Jitter (σ)</div>
-          <div class="mt-0.5 font-mono text-sm font-semibold text-zinc-100">${o.jitterMs.toFixed(2)} ms</div>
-          <div class="text-[10px] text-zinc-500">Std deviation</div>
+        <div class="metric-tile p-2.5">
+          <div class="text-micro font-mono uppercase">Jitter (σ)</div>
+          <div class="mt-0.5 font-mono text-sm font-semibold text-primary">${o.jitterMs.toFixed(2)} ms</div>
+          <div class="text-[10px] text-muted">Std deviation</div>
         </div>
-        <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 p-2.5">
-          <div class="text-[10px] font-mono uppercase text-zinc-400">Reliability</div>
-          <div class="mt-0.5 font-mono text-sm font-semibold text-zinc-100">${(100 - o.lossPct).toFixed(0)}%</div>
-          <div class="text-[10px] text-zinc-500">${o.received}/${o.sent} (${o.lossPct.toFixed(0)}% loss)</div>
+        <div class="metric-tile p-2.5">
+          <div class="text-micro font-mono uppercase">Reliability</div>
+          <div class="mt-0.5 font-mono text-sm font-semibold text-primary">${(100 - o.lossPct).toFixed(0)}%</div>
+          <div class="text-[10px] text-muted">${o.received}/${o.sent} (${o.lossPct.toFixed(0)}% loss)</div>
         </div>
-        <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 p-2.5">
-          <div class="text-[10px] font-mono uppercase text-zinc-400">Egress Identity</div>
-          <div class="mt-0.5 font-mono text-xs font-semibold text-zinc-200 truncate">${escapeHTML((item.hijack && item.hijack.udpEgress) || '—')}</div>
-          <div class="text-[10px] text-zinc-500 truncate">DoH: ${escapeHTML((item.hijack && item.hijack.dohEgress) || '—')}</div>
+        <div class="metric-tile p-2.5">
+          <div class="text-micro font-mono uppercase">Egress Identity</div>
+          <div class="mt-0.5 font-mono text-xs font-semibold text-primary truncate">${escapeHTML((item.hijack && item.hijack.udpEgress) || '—')}</div>
+          <div class="text-[10px] text-muted truncate">DoH: ${escapeHTML((item.hijack && item.hijack.dohEgress) || '—')}</div>
         </div>
       </div>
 
@@ -700,7 +736,7 @@
         ${protoCards}
       </div>
       ${findings}
-      ` : `<div class="mt-3 text-zinc-400 font-mono">Click “Run Speed Test” above to measure cached vs. uncached latency, P95, jitter, DNSSEC, ad-blocking, and ISP hijacking.</div>`)}
+      ` : `<div class="mt-3 text-secondary font-mono">Click “Run Speed Test” above to measure cached vs. uncached latency, P95, jitter, DNSSEC, ad-blocking, and ISP hijacking.</div>`)}
     `;
   }
 
@@ -728,7 +764,7 @@
         <th class="py-3 px-3">Resolver</th>
         <th class="py-3 px-2.5 text-right">Avg (ms)</th>
         <th class="py-3 px-2.5 text-right">P95</th>
-        <th class="py-3 px-3">Latency Sparkline &amp; Range (Min–Avg–Max)</th>
+        <th class="py-3 px-3">Latency Range (Min–Avg–P95–Max)</th>
         <th class="py-3 px-2.5 text-right">Cached</th>
         <th class="py-3 px-2.5 text-right">Uncached</th>
         <th class="py-3 px-2.5 text-right">Jitter (σ)</th>
@@ -743,14 +779,14 @@
 
     const colSpan = 13 + activeProtos.length;
     if (items.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="${colSpan}" class="py-8 text-center text-zinc-400">No resolvers match the selected filter.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${colSpan}" class="py-8 text-center text-secondary">No resolvers match the selected filter.</td></tr>`;
       return;
     }
 
     const protoCell = (item, p) => {
       const pr = item.protocols && item.protocols[p];
-      if (!pr || !pr.combined || pr.combined.sent === 0) return '<span class="text-zinc-600">—</span>';
-      if (pr.combined.received === 0) return `<span class="text-rose-400">${escapeHTML(pr.error || 'err')}</span>`;
+      if (!pr || !pr.combined || pr.combined.sent === 0) return '<span class="text-muted">—</span>';
+      if (pr.combined.received === 0) return `<span class="text-rose">${escapeHTML(pr.error || 'err')}</span>`;
       return `${pr.combined.avgMs.toFixed(1)} ms`;
     };
 
@@ -764,19 +800,19 @@
       const primaryAddr = (r.ipv4 && r.ipv4[0]) || r.doh || r.dot || '—';
 
       return `
-      <tr class="hover:bg-zinc-900/50 transition ${isSkipped ? 'opacity-65' : ''}">
-        <td class="py-3 px-3 font-mono text-zinc-400">${isSkipped ? '—' : isPending ? '·' : item.rank}</td>
+      <tr class="pro-row ${isSkipped ? 'opacity-65' : ''}">
+        <td class="py-3 px-3 font-mono text-secondary">${isSkipped ? '—' : isPending ? '·' : String(item.rank).padStart(2, '0')}</td>
         <td class="py-3 px-3">
           <div class="flex items-center gap-1.5">
-            <span class="font-semibold text-zinc-100">${escapeHTML(r.name)}</span>
+            <span class="font-semibold text-primary">${escapeHTML(r.name)}</span>
             ${categoryBadgeHTML(r.category, r.deprecated)}
           </div>
-          <div class="font-mono text-[11px] text-zinc-400 truncate max-w-[190px]">${escapeHTML(primaryAddr)}</div>
+          <div class="font-mono text-[11px] text-secondary truncate max-w-[190px]">${escapeHTML(primaryAddr)}</div>
         </td>
         <td class="py-3 px-2.5 text-right font-mono">
-          ${isSkipped ? '<span class="badge-neutral px-2 py-0.5 rounded">Skipped</span>' : isPending ? `<span class="text-zinc-500">${state.running ? '…' : '—'}</span>` : isFailed ? '<span class="badge-rose px-2 py-0.5 rounded">Failed</span>' : `<span class="${latencyBadgeClass(o.avgMs)} px-2 py-0.5 rounded font-semibold">${o.avgMs.toFixed(2)}</span>`}
+          ${isSkipped ? '<span class="badge-pill badge-neutral">Skipped</span>' : isPending ? `<span class="text-muted">${state.running ? '…' : '—'}</span>` : isFailed ? '<span class="badge-pill badge-rose">Failed</span>' : `<span class="badge-latency ${latencyBadgeClass(o.avgMs)} font-semibold">${o.avgMs.toFixed(2)}</span>`}
         </td>
-        <td class="py-3 px-2.5 text-right font-mono text-zinc-300">
+        <td class="py-3 px-2.5 text-right font-mono text-primary">
           ${!isPending && !isFailed && !isSkipped ? `${(o.p95Ms || o.maxMs).toFixed(1)}` : '—'}
         </td>
         <td class="py-3 px-3">
@@ -785,18 +821,18 @@
             ${!isPending && !isFailed && !isSkipped && o && o.samples ? renderSparklineSVG(o.samples, o.avgMs, 76, 20) : ''}
           </div>
         </td>
-        <td class="py-3 px-2.5 text-right font-mono text-emerald-300">${!isPending && !isSkipped && item.cached && item.cached.received > 0 ? item.cached.avgMs.toFixed(2) : '—'}</td>
-        <td class="py-3 px-2.5 text-right font-mono text-cyan-300">${!isPending && !isSkipped && item.uncached && item.uncached.received > 0 ? item.uncached.avgMs.toFixed(2) : '—'}</td>
-        <td class="py-3 px-2.5 text-right font-mono text-zinc-300">${!isPending && !isFailed && !isSkipped ? `${o.jitterMs.toFixed(2)} ms` : '—'}</td>
-        <td class="py-3 px-2.5 text-right font-mono ${o && o.lossPct > 0 ? 'text-amber-300' : 'text-zinc-400'}">${!isPending && !isSkipped ? `${o.lossPct.toFixed(0)}%` : '—'}</td>
-        ${activeProtos.map((p) => `<td class="py-3 px-2.5 text-right font-mono text-zinc-200">${protoCell(item, p)}</td>`).join('')}
+        <td class="py-3 px-2.5 text-right font-mono text-emerald">${!isPending && !isSkipped && item.cached && item.cached.received > 0 ? item.cached.avgMs.toFixed(2) : '—'}</td>
+        <td class="py-3 px-2.5 text-right font-mono text-cyan">${!isPending && !isSkipped && item.uncached && item.uncached.received > 0 ? item.uncached.avgMs.toFixed(2) : '—'}</td>
+        <td class="py-3 px-2.5 text-right font-mono text-primary">${!isPending && !isFailed && !isSkipped ? `${o.jitterMs.toFixed(2)} ms` : '—'}</td>
+        <td class="py-3 px-2.5 text-right font-mono ${o && o.lossPct > 0 ? 'text-amber' : 'text-secondary'}">${!isPending && !isSkipped ? `${o.lossPct.toFixed(0)}%` : '—'}</td>
+        ${activeProtos.map((p) => `<td class="py-3 px-2.5 text-right font-mono text-primary">${protoCell(item, p)}</td>`).join('')}
         <td class="py-3 px-2.5">${dnssecBadgeHTML(item.dnssec)}</td>
         <td class="py-3 px-2.5">${adBlockBadgeHTML(item.filtering)}</td>
         <td class="py-3 px-2.5">${hijackBadgeHTML(item.hijack)}</td>
         <td class="py-3 px-3 text-right">
           <div class="inline-flex items-center gap-1.5">
-            ${canApply ? `<button type="button" data-apply-resolver="${escapeHTML(r.id)}" class="px-2.5 py-1 rounded bg-zinc-800 hover:bg-emerald-500 hover:text-zinc-950 text-zinc-100 font-medium transition">Apply</button>` : ''}
-            <button type="button" data-copy-resolver="${escapeHTML(r.id)}" class="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 font-mono text-[11px] text-zinc-300" title="Copy DNS addresses">Copy</button>
+            ${canApply ? `<button type="button" data-apply-resolver="${escapeHTML(r.id)}" class="btn-apply btn-apply-sm">Apply</button>` : ''}
+            <button type="button" data-copy-resolver="${escapeHTML(r.id)}" class="btn-chip font-mono" title="Copy DNS addresses &amp; DoH/DoT">Copy</button>
           </div>
         </td>
       </tr>`;
@@ -824,7 +860,7 @@
   // Gather Benchmark Options from UI + Persisted Settings
   function collectOptions() {
     const protos = Array.from(document.querySelectorAll('.proto-checkbox:checked')).map((el) => el.value);
-    const uncachedBase = (state.settings && state.settings.options && state.settings.options.uncachedBase) || state.defaultOptions.uncachedBase || 'resbench.invalid';
+    const uncachedBase = (state.settings && state.settings.options && state.settings.options.uncachedBase) || state.defaultOptions.uncachedBase || 'example.com';
     return {
       queries: Number($('optQueries').value) || 10,
       timeoutMs: Number($('optTimeout').value) || 2000,
@@ -948,13 +984,16 @@
     const displayAddrs = addrs.length > 0 ? addrs : [r.doh || r.dot || ''];
     const ifaceName = (state.network && state.network.active && state.network.active.name) || 'Wi-Fi / Ethernet';
     openManualFallbackModal({
-      message: `Copy ${r.name}'s addresses below or run the one-liner command in an elevated terminal.`,
+      title: `${r.name} — Endpoints & Manual Setup`,
+      message: `Copy ${r.name}'s addresses or encrypted endpoints below, or run the elevated CLI command.`,
       addresses: displayAddrs,
+      doh: r.doh || '',
+      dot: r.dot || '',
       manual: {
         steps: [
           `Open your system Network Settings for “${ifaceName}”.`,
-          `Paste the primary and secondary addresses below into the DNS configuration field.`,
-          r.doh ? `Optional DoH endpoint: ${r.doh}` : 'Save changes and flush your DNS cache.'
+          `Paste the primary and secondary IPv4 / IPv6 addresses into the DNS configuration field.`,
+          r.doh ? `Optional encrypted DoH endpoint: ${r.doh}` : 'Save changes and flush your DNS cache.'
         ],
         command: buildQuickCommand(addrs, ifaceName)
       }
@@ -975,13 +1014,43 @@
   }
 
   function openManualFallbackModal(actionRes) {
+    $('manualModalTitle').textContent = actionRes.title || 'DNS Endpoints & Manual Setup';
     $('manualModalMessage').textContent = actionRes.message || '';
     const addrs = (actionRes.addresses || []).join(', ');
     $('manualAddressesBox').textContent = addrs || '—';
+    const dohRow = $('manualDoHRow');
+    const dotRow = $('manualDoTRow');
+    if (dohRow && $('manualDoHBox')) {
+      dohRow.classList.toggle('hidden', !actionRes.doh);
+      $('manualDoHBox').textContent = actionRes.doh || '';
+    }
+    if (dotRow && $('manualDoTBox')) {
+      dotRow.classList.toggle('hidden', !actionRes.dot);
+      $('manualDoTBox').textContent = actionRes.dot || '';
+    }
     const manual = actionRes.manual || { steps: [], command: '' };
     $('manualCommandBox').textContent = manual.command || '—';
     $('manualStepsList').innerHTML = (manual.steps || []).map((s) => `<li>${escapeHTML(s)}</li>`).join('');
     $('manualFallbackModal').classList.remove('hidden');
+  }
+
+  function syncSpeedPresetUI(queries) {
+    const q = String(queries || 10);
+    if ($('optQueries')) $('optQueries').value = q;
+    document.querySelectorAll('#speedPresetGroup .preset-chip').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.preset === q);
+    });
+    updateHeroSubStatus();
+  }
+
+  function updateHeroSubStatus() {
+    const el = $('heroSubStatus');
+    if (!el) return;
+    const protos = Array.from(document.querySelectorAll('.proto-checkbox:checked')).map((cb) => cb.value.toUpperCase());
+    const protoLabel = (protos.length > 0 ? protos : ['UDP', 'DOH']).join(' + ');
+    const q = Number(($('optQueries') && $('optQueries').value) || 10);
+    const probes = !$('optIntegrity') || $('optIntegrity').checked ? 'DNSSEC · AdBlock · Hijack' : 'Latency Only';
+    el.textContent = `${protoLabel} · ${q}q/domain · ${probes}`;
   }
 
   function setMode(mode, persist = true) {
@@ -991,16 +1060,14 @@
     $('simpleViewSection').classList.toggle('hidden', state.mode !== 'simple');
     $('proViewSection').classList.toggle('hidden', state.mode !== 'pro');
     $('proConfigBar').classList.toggle('hidden', state.mode !== 'pro');
+    renderTablesOnly();
     if (persist) persistUiPreferences();
   }
 
   function applyCategoryFilterUI(cat) {
     state.categoryFilter = cat || 'all';
     document.querySelectorAll('#categoryFilterGroup .cat-chip').forEach((el) => {
-      const active = el.dataset.cat === state.categoryFilter;
-      el.className = active
-        ? 'cat-chip active px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-800 text-zinc-100 border border-zinc-700'
-        : 'cat-chip px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800';
+      el.classList.toggle('active', el.dataset.cat === state.categoryFilter);
     });
   }
 
@@ -1010,9 +1077,9 @@
     document.querySelectorAll('.proto-checkbox').forEach((cb) => {
       cb.checked = protos.has(cb.value);
     });
-    if ($('optQueries') && opts.queries) $('optQueries').value = String(opts.queries);
     if ($('optTimeout') && opts.timeoutMs) $('optTimeout').value = String(opts.timeoutMs);
     if ($('optIntegrity')) $('optIntegrity').checked = opts.checkIntegrity !== false;
+    syncSpeedPresetUI(opts.queries || 10);
   }
 
   async function persistUiPreferences() {
@@ -1062,7 +1129,7 @@
 
   function renderUpdateModal(errorMsg = '') {
     const info = state.updateInfo;
-    $('updateCurrentVer').textContent = `v${state.version || '1.1.1'}`;
+    $('updateCurrentVer').textContent = `v${state.version || '1.2.0'}`;
     $('updateLatestVer').textContent = info && info.version ? `v${info.version}` : '—';
 
     const badge = $('updateModalBadge');
@@ -1075,7 +1142,7 @@
 
     noteBox.classList.add('hidden');
     if (errorMsg) {
-      badge.className = 'font-mono text-[10px] px-1.5 py-0.5 rounded bg-rose-950/70 border border-rose-800 text-rose-200';
+      badge.className = 'badge-pill badge-rose font-mono';
       badge.textContent = 'Error';
       title.textContent = errorMsg;
       installBtn.classList.add('hidden');
@@ -1084,7 +1151,7 @@
     }
 
     if (!info) {
-      badge.className = 'font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300';
+      badge.className = 'badge-mode font-mono';
       badge.textContent = 'Idle';
       title.textContent = 'Click Check Now to query GitHub Releases.';
       notesEl.textContent = 'No changelog loaded yet.';
@@ -1097,7 +1164,7 @@
     notesEl.textContent = (info.body && info.body.trim()) || 'No changelog summary provided for this release.';
 
     if (!info.isAvailable) {
-      badge.className = 'font-mono text-[10px] px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300';
+      badge.className = 'badge-pill badge-emerald font-mono';
       badge.textContent = 'Up to date';
       title.textContent = `You are running the latest version of Resolv (v${state.version}).`;
       meta.classList.add('hidden');
@@ -1105,7 +1172,7 @@
       return;
     }
 
-    badge.className = 'font-mono text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/50 text-emerald-300';
+    badge.className = 'badge-pill badge-emerald font-mono';
     badge.textContent = info.assetReady ? 'Update Ready' : 'Release Found';
     title.textContent = `${info.title || 'Resolv v' + info.version} is available!`;
 
@@ -1203,12 +1270,12 @@
   async function openHistoryModal() {
     $('historyModal').classList.remove('hidden');
     const container = $('historyListContainer');
-    container.innerHTML = '<div class="py-8 text-center text-zinc-400">Loading history…</div>';
+    container.innerHTML = '<div class="py-8 text-center text-secondary">Loading history…</div>';
     try {
       const entries = await backend.GetHistory();
       renderHistoryList(entries || []);
     } catch (err) {
-      container.innerHTML = `<div class="py-8 text-center text-rose-300">Failed to load history: ${escapeHTML(err.message || err)}</div>`;
+      container.innerHTML = `<div class="py-8 text-center text-rose">Failed to load history: ${escapeHTML(err.message || err)}</div>`;
     }
   }
 
@@ -1216,7 +1283,7 @@
     const container = $('historyListContainer');
     $('historyCountBadge').textContent = `${entries.length} run${entries.length === 1 ? '' : 's'}`;
     if (!entries || entries.length === 0) {
-      container.innerHTML = `<div class="rounded-xl bg-zinc-900/50 border border-zinc-800 p-8 text-center text-zinc-400">No benchmark runs recorded yet. Run a Speed Test to save snapshots here.</div>`;
+      container.innerHTML = `<div class="subtile p-8 text-center text-secondary">No benchmark runs recorded yet. Run a Speed Test to save snapshots here.</div>`;
       return;
     }
     container.innerHTML = entries.map((e) => {
@@ -1225,25 +1292,25 @@
       const top = Array.isArray(e.topResults) ? e.topResults : [];
       const topHtml = top.map((row, idx) => `
         <div class="flex items-center justify-between gap-2 text-[11px] font-mono">
-          <span class="text-zinc-300 truncate">${idx + 1}. ${escapeHTML(row.name)}</span>
-          <span class="${latencyBadgeClass(row.avgMs)} px-1.5 py-0.2 rounded">${Number(row.avgMs).toFixed(1)} ms</span>
+          <span class="text-secondary truncate">${idx + 1}. ${escapeHTML(row.name)}</span>
+          <span class="badge-latency ${latencyBadgeClass(row.avgMs)}">${Number(row.avgMs).toFixed(1)} ms</span>
         </div>
       `).join('');
-      const gainStr = e.improvementPct >= 2 ? `<span class="text-emerald-400 font-mono">+${Math.round(e.improvementPct)}% gain</span>` : '';
+      const gainStr = e.improvementPct >= 2 ? `<span class="text-emerald font-mono">+${Math.round(e.improvementPct)}% gain</span>` : '';
       return `
-        <div class="rounded-xl bg-zinc-900/70 border border-zinc-800 p-3.5 space-y-2">
+        <div class="subtile p-3.5 space-y-2">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <div class="font-medium text-zinc-100">${escapeHTML(e.winnerName || 'No winner')} ${e.winnerAvgMs ? `<span class="font-mono text-emerald-400">(${Number(e.winnerAvgMs).toFixed(1)} ms)</span>` : ''}</div>
-              <div class="text-[11px] font-mono text-zinc-400">${escapeHTML(ts)} · ${escapeHTML(e.adapterName || 'Network')} · Sys: ${escapeHTML(sysStr)}</div>
+              <div class="font-medium text-primary">${escapeHTML(e.winnerName || 'No winner')} ${e.winnerAvgMs ? `<span class="font-mono text-emerald">(${Number(e.winnerAvgMs).toFixed(1)} ms)</span>` : ''}</div>
+              <div class="text-[11px] font-mono text-secondary">${escapeHTML(ts)} · ${escapeHTML(e.adapterName || 'Network')} · Sys: ${escapeHTML(sysStr)}</div>
             </div>
             <div class="flex items-center gap-2">
-              ${e.intercepted ? '<span class="badge-rose font-mono text-[10px] px-1.5 py-0.5 rounded">Hijacked Port 53</span>' : ''}
+              ${e.intercepted ? '<span class="badge-pill badge-rose font-mono">Hijacked Port 53</span>' : ''}
               ${gainStr}
-              <span class="font-mono text-[10px] text-zinc-500">${((e.durationMs || 0) / 1000).toFixed(1)}s</span>
+              <span class="font-mono text-[10px] text-muted">${((e.durationMs || 0) / 1000).toFixed(1)}s</span>
             </div>
           </div>
-          ${topHtml ? `<div class="pt-2 border-t border-zinc-800/80 grid grid-cols-1 sm:grid-cols-2 gap-1.5">${topHtml}</div>` : ''}
+          ${topHtml ? `<div class="pt-2 border-top-hairline grid grid-cols-1 sm:grid-cols-2 gap-1.5">${topHtml}</div>` : ''}
         </div>
       `;
     }).join('');
@@ -1259,7 +1326,7 @@
     });
     $('setDefaultQueries').value = String(o.queries || 10);
     $('setDefaultTimeout').value = String(o.timeoutMs || 2000);
-    $('setUncachedBase').value = o.uncachedBase || 'resbench.invalid';
+    $('setUncachedBase').value = o.uncachedBase || 'example.com';
     $('setCheckIntegrity').checked = o.checkIntegrity !== false;
     $('settingsConfigDir').textContent = state.configDir || 'OS User Config Directory / Resolv';
     $('settingsModal').classList.remove('hidden');
@@ -1282,7 +1349,7 @@
         queries: Number($('setDefaultQueries').value) || 10,
         timeoutMs: Number($('setDefaultTimeout').value) || 2000,
         protocols: protos,
-        uncachedBase: ($('setUncachedBase').value || 'resbench.invalid').trim(),
+        uncachedBase: ($('setUncachedBase').value || 'example.com').trim(),
         checkIntegrity: Boolean($('setCheckIntegrity').checked)
       }
     };
@@ -1448,6 +1515,13 @@
       if (!e.target.closest('#exportMenuBtn') && !e.target.closest('#exportDropdown')) {
         $('exportDropdown').classList.add('hidden');
       }
+      const copyValBtn = e.target.closest('[data-copy-value]');
+      if (copyValBtn) {
+        const val = copyValBtn.dataset.copyValue;
+        const label = copyValBtn.dataset.copyLabel || 'Endpoint';
+        await copyText(val, `Copied ${label}: ${val}`);
+        return;
+      }
       const applyBtn = e.target.closest('[data-apply-resolver]');
       if (applyBtn) {
         applyResolverById(applyBtn.dataset.applyResolver);
@@ -1477,6 +1551,30 @@
         else state.expandedIds.add(id);
         renderResults();
       }
+    });
+
+    if ($('speedPresetGroup')) {
+      $('speedPresetGroup').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-preset]');
+        if (!btn) return;
+        const q = Number(btn.dataset.preset) || 10;
+        syncSpeedPresetUI(q);
+        if (state.settings && state.settings.options) {
+          state.settings.options.queries = q;
+        }
+        persistUiPreferences();
+      });
+    }
+    if ($('optQueries')) {
+      $('optQueries').addEventListener('change', (e) => {
+        const q = Number(e.target.value) || 10;
+        syncSpeedPresetUI(q);
+        if (state.settings && state.settings.options) state.settings.options.queries = q;
+        persistUiPreferences();
+      });
+    }
+    document.querySelectorAll('.proto-checkbox, #optIntegrity').forEach((el) => {
+      el.addEventListener('change', updateHeroSubStatus);
     });
 
     $('openCustomModalBtn').addEventListener('click', () => {
@@ -1559,7 +1657,7 @@
       btn.addEventListener('click', () => openExportModal(btn.dataset.export));
     });
     $('copyExportBtn').addEventListener('click', async () => {
-      await navigator.clipboard.writeText($('exportTextarea').value);
+      await copyText($('exportTextarea').value);
       $('exportStatusHint').textContent = 'Copied to clipboard!';
     });
     $('saveExportFileBtn').addEventListener('click', async () => {
@@ -1568,18 +1666,26 @@
     });
 
     $('copyAddressesBtn').addEventListener('click', async () => {
-      await navigator.clipboard.writeText($('manualAddressesBox').textContent);
-      showToast('Copied DNS addresses to clipboard.', 'success');
+      await copyText($('manualAddressesBox').textContent, 'Copied DNS addresses to clipboard.');
     });
+    if ($('copyManualDoHBtn')) {
+      $('copyManualDoHBtn').addEventListener('click', async () => {
+        await copyText($('manualDoHBox').textContent, 'Copied DoH URL to clipboard.');
+      });
+    }
+    if ($('copyManualDoTBtn')) {
+      $('copyManualDoTBtn').addEventListener('click', async () => {
+        await copyText($('manualDoTBox').textContent, 'Copied DoT hostname to clipboard.');
+      });
+    }
     $('copyCommandBtn').addEventListener('click', async () => {
-      await navigator.clipboard.writeText($('manualCommandBox').textContent);
-      showToast('Copied terminal command to clipboard.', 'success');
+      await copyText($('manualCommandBox').textContent, 'Copied terminal command to clipboard.');
     });
   }
 
   function applyBootstrap(b) {
     if (!b) return;
-    state.version = b.version || '1.1.1';
+    state.version = b.version || '1.2.0';
     state.configDir = b.configDir || '';
     $('appVersionBadge').textContent = `v${state.version}`;
     if (b.network) {
@@ -1625,7 +1731,7 @@
         staggerMs: 12,
         protocols: ['udp', 'doh'],
         cachedDomains: ['cloudflare.com', 'google.com', 'apple.com'],
-        uncachedBase: 'resbench.invalid',
+        uncachedBase: 'example.com',
         checkIntegrity: true
       }
     };
@@ -1722,8 +1828,8 @@
     };
 
     return {
-      getBootstrap: () => ({ version: '1.1.1', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
-      selectInterface: () => ({ version: '1.1.1', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
+      getBootstrap: () => ({ version: '1.2.0', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
+      selectInterface: () => ({ version: '1.2.0', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
       addCustomResolver(name, input) {
         if (!input) throw new Error('Enter an IPv4/IPv6 address or DoH URL');
         resolvers = [...resolvers, { id: 'custom-' + Date.now(), name: name || input, category: 'Custom', source: 'custom', ipv4: [input] }];
@@ -1751,10 +1857,10 @@
         message: `Verified ${demoNet.systemDns.join(', ')}: 11.4 ms avg (cached 7.8 ms · uncached 15.0 ms · 0% loss)`
       }),
       checkForUpdates: () => ({
-        currentVersion: '1.1.1',
-        version: '1.1.1',
-        tagName: 'v1.1.1',
-        title: 'Resolv v1.1.1',
+        currentVersion: '1.2.0',
+        version: '1.2.0',
+        tagName: 'v1.2.0',
+        title: 'Resolv v1.2.0',
         body: '- Auto-updater with SHA-256 verification\n- Live streaming benchmark results\n- Persistent settings and benchmark history',
         htmlUrl: 'https://github.com/efeartn/Resolv/releases',
         isAvailable: false,
@@ -1791,7 +1897,7 @@
           topResults: results.slice(0, 5).map((r) => ({ name: r.resolver.name, category: r.resolver.category, avgMs: r.overall.avgMs, p95Ms: r.overall.p95Ms, jitterMs: r.overall.jitterMs, lossPct: r.overall.lossPct }))
         });
         return {
-          version: '1.1.1',
+          version: '1.2.0',
           durationMs: 1420,
           options: opts,
           results,

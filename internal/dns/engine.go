@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -200,7 +201,10 @@ func Run(ctx context.Context, resolvers []Resolver, opts Options, version string
 	timeout := opts.timeout()
 
 	dohTransport := newDoHTransport(timeout)
-	defer dohTransport.CloseIdleConnections()
+	defer func() {
+		dohTransport.CloseIdleConnections()
+		debug.FreeOSMemory()
+	}()
 	dohClient := &http.Client{Transport: dohTransport, Timeout: timeout}
 
 	// Build per-server queriers.
@@ -245,7 +249,7 @@ func Run(ctx context.Context, resolvers []Resolver, opts Options, version string
 		results[i] = s.summarise(false)
 	}
 	if opts.CheckIntegrity && ctx.Err() == nil {
-		report.Network = checkIntegrity(ctx, servers, results, opts, progress)
+		report.Network = checkIntegrity(ctx, servers, results, opts, dohClient, progress)
 	}
 
 	rank(results)
@@ -298,7 +302,7 @@ func warmup(ctx context.Context, servers []*serverState, opts Options, progress 
 // buildJobs interleaves queries round-robin across servers so every server
 // sees the same network conditions and no single server receives a burst.
 func buildJobs(servers []*serverState, opts Options) []job {
-	var jobs []job
+	jobs := make([]job, 0, opts.Queries*2*len(opts.Protocols)*len(servers))
 	for seq := 0; seq < opts.Queries; seq++ {
 		for _, kind := range []queryKind{kindCached, kindUncached} {
 			for _, ps := range opts.Protocols {
@@ -387,7 +391,7 @@ func runJobs(ctx context.Context, servers []*serverState, jobs []job, opts Optio
 			var partial []*ServerResult
 			nowMs := time.Now().UnixMilli()
 			prevMs := lastSnapshotMs.Load()
-			if int(n) == total || (nowMs-prevMs >= 220 && lastSnapshotMs.CompareAndSwap(prevMs, nowMs)) {
+			if int(n) == total || (nowMs-prevMs >= 260 && lastSnapshotMs.CompareAndSwap(prevMs, nowMs)) {
 				partial = snapshotResults(servers, true)
 			}
 			progress(Progress{
@@ -655,7 +659,10 @@ func QuickVerify(ctx context.Context, r Resolver, opts Options) *ServerResult {
 	}
 
 	dohTransport := newDoHTransport(timeout)
-	defer dohTransport.CloseIdleConnections()
+	defer func() {
+		dohTransport.CloseIdleConnections()
+		debug.FreeOSMemory()
+	}()
 	dohClient := &http.Client{Transport: dohTransport, Timeout: timeout}
 
 	st := &serverState{

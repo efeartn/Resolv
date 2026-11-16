@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	AppVersion = "1.1.1"
+	AppVersion = "1.2.0"
 	AppRepo    = "efeartn/Resolv"
 	AppRepoURL = "https://github.com/efeartn/Resolv"
 	AppLicense = "GNU General Public License v3.0 or later (GPL-3.0-or-later)"

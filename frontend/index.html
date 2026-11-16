@@ -5,365 +5,322 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Resolv — Cross-Platform DNS Benchmark &amp; Privacy Probe</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
-            mono: ['JetBrains Mono', 'Cascadia Code', 'SF Mono', 'Consolas', 'monospace']
-          }
-        }
-      }
-    };
-  </script>
+  <title>Resolv — DNS Latency, Privacy &amp; Integrity Instrument</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="bg-[#09090b] text-zinc-100 font-sans antialiased selection:bg-emerald-500/30 selection:text-emerald-200 min-h-screen flex flex-col">
+<body class="app-body font-sans antialiased min-h-screen flex flex-col">
 
-  <!-- Top Navigation Bar -->
-  <header class="sticky top-0 z-30 border-b border-zinc-800/80 bg-[#09090b]/95 backdrop-blur-md">
-    <div class="max-w-7xl mx-auto px-4 sm:px-5 h-14 flex items-center justify-between gap-2 sm:gap-3">
+  <!-- Top Instrument Header -->
+  <header class="app-header sticky top-0 z-30">
+    <div class="container-app h-14 flex items-center justify-between gap-2 sm:gap-3">
       <!-- Brand Identity -->
       <div class="flex items-center gap-2.5 shrink-0">
-        <img src="icon.svg" alt="Resolv" class="w-8 h-8 rounded-lg border border-zinc-800" />
+        <img src="icon.svg" alt="Resolv" class="w-8 h-8 rounded-lg border-hairline" />
         <div class="flex items-center gap-1.5 sm:gap-2">
-          <span class="font-semibold tracking-tight text-zinc-100 text-[15px]">Resolv</span>
-          <span id="appVersionBadge" class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">v1.1.1</span>
-          <span id="elevatedBadge" class="hidden text-[11px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300" title="Running with Administrator / Root privileges">Admin</span>
-          <span id="offlineBadge" class="hidden text-[11px] font-mono px-1.5 py-0.5 rounded bg-rose-950/80 border border-rose-800 text-rose-300" title="No active network route detected">Offline</span>
+          <span class="font-semibold tracking-tight text-primary text-[15px]">Resolv</span>
+          <span id="appVersionBadge" class="tag-version font-mono">v1.2.0</span>
+          <span id="elevatedBadge" class="hidden tag-admin font-mono" title="Running with Administrator / Root privileges">Admin</span>
+          <span id="offlineBadge" class="hidden tag-offline font-mono" title="No active network route detected">Offline</span>
         </div>
       </div>
 
-      <!-- Progressive Disclosure Mode Switcher & Actions -->
+      <!-- Mode Switcher & Header Utility Strip -->
       <div class="flex items-center gap-1.5 sm:gap-2">
-        <div class="inline-flex items-center p-0.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs" role="tablist" aria-label="Interface Mode">
+        <div class="mode-track inline-flex items-center p-0.5 rounded-lg text-xs" role="tablist" aria-label="Interface Mode">
           <button id="modeSimpleBtn" type="button" data-mode="simple"
-            class="mode-tab active px-2.5 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 whitespace-nowrap">
-            <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            class="mode-tab active px-2.5 py-1.5 rounded-md font-medium flex items-center gap-1.5 whitespace-nowrap"
+            title="Simple View (Alt+1)">
+            <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
             <span>Simple View</span>
           </button>
           <button id="modeProBtn" type="button" data-mode="pro"
-            class="mode-tab px-2.5 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 text-zinc-400 hover:text-zinc-200 whitespace-nowrap">
-            <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/></svg>
+            class="mode-tab px-2.5 py-1.5 rounded-md font-medium flex items-center gap-1.5 whitespace-nowrap"
+            title="Pro Telemetry Matrix (Alt+2)">
+            <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/></svg>
             <span>Pro Telemetry</span>
           </button>
         </div>
 
-        <!-- Custom DNS Button -->
-        <button id="openCustomModalBtn" type="button"
-          class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800 text-xs font-medium text-zinc-200 transition flex items-center gap-1.5 whitespace-nowrap"
-          title="Add Custom DNS Resolver">
-          <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        <button id="openCustomModalBtn" type="button" class="tool-btn flex items-center gap-1.5 whitespace-nowrap" title="Add Custom DNS Resolver">
+          <svg class="w-3.5 h-3.5 text-emerald shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
           <span class="hidden md:inline">Custom DNS</span>
           <span class="md:hidden">Custom</span>
         </button>
 
-        <!-- Benchmark History Trigger -->
-        <button id="openHistoryModalBtn" type="button"
-          class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800 text-xs font-medium text-zinc-200 transition flex items-center gap-1.5 whitespace-nowrap"
-          title="View Saved Benchmark History">
-          <svg class="w-3.5 h-3.5 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+        <button id="openHistoryModalBtn" type="button" class="tool-btn flex items-center gap-1.5 whitespace-nowrap" title="View Saved Benchmark History">
+          <svg class="w-3.5 h-3.5 text-secondary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
           <span class="hidden lg:inline">History</span>
         </button>
 
-        <!-- Export Dropdown Trigger -->
         <div class="relative">
-          <button id="exportMenuBtn" type="button" disabled
-            class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800/90 disabled:opacity-40 disabled:pointer-events-none border border-zinc-800 text-xs font-medium text-zinc-200 transition flex items-center gap-1.5 whitespace-nowrap">
-            <svg class="w-3.5 h-3.5 text-cyan-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <button id="exportMenuBtn" type="button" disabled class="tool-btn flex items-center gap-1.5 whitespace-nowrap" title="Export Benchmark Report">
+            <svg class="w-3.5 h-3.5 text-cyan shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             <span class="hidden lg:inline">Export</span>
           </button>
-          <div id="exportDropdown" class="hidden absolute right-0 mt-1.5 w-48 rounded-xl bg-zinc-900 border border-zinc-800 shadow-2xl py-1 z-40 text-xs">
-            <div class="px-3 py-1.5 text-[11px] font-mono uppercase tracking-wider text-zinc-500 border-b border-zinc-800/80">Export Report As</div>
-            <button type="button" data-export="md" class="w-full text-left px-3 py-2 hover:bg-zinc-800 flex items-center justify-between text-zinc-200">
-              <span>Markdown Table</span><span class="font-mono text-zinc-500">.md</span>
+          <div id="exportDropdown" class="hidden dropdown-menu absolute right-0 mt-1.5 w-48 z-40 text-xs">
+            <div class="dropdown-header font-mono">Export Report As</div>
+            <button type="button" data-export="md" class="dropdown-item">
+              <span>Markdown Table</span><span class="font-mono text-muted">.md</span>
             </button>
-            <button type="button" data-export="csv" class="w-full text-left px-3 py-2 hover:bg-zinc-800 flex items-center justify-between text-zinc-200">
-              <span>CSV Spreadsheet</span><span class="font-mono text-zinc-500">.csv</span>
+            <button type="button" data-export="csv" class="dropdown-item">
+              <span>CSV Spreadsheet</span><span class="font-mono text-muted">.csv</span>
             </button>
-            <button type="button" data-export="json" class="w-full text-left px-3 py-2 hover:bg-zinc-800 flex items-center justify-between text-zinc-200">
-              <span>JSON Telemetry</span><span class="font-mono text-zinc-500">.json</span>
+            <button type="button" data-export="json" class="dropdown-item">
+              <span>JSON Telemetry</span><span class="font-mono text-muted">.json</span>
             </button>
           </div>
         </div>
 
-        <!-- Check for Updates Pill -->
-        <button id="openUpdateModalBtn" type="button"
-          class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800 text-xs font-medium text-zinc-300 transition flex items-center gap-1.5 whitespace-nowrap"
-          title="Check for Resolv Software Updates">
-          <span id="updateNavDot" class="hidden w-2 h-2 rounded-full bg-emerald-400 update-dot-pulse shrink-0"></span>
-          <svg id="updateNavIcon" class="w-3.5 h-3.5 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+        <button id="openUpdateModalBtn" type="button" class="tool-btn flex items-center gap-1.5 whitespace-nowrap" title="Check for Resolv Software Updates">
+          <span id="updateNavDot" class="hidden w-2 h-2 rounded-full bg-emerald-dot shrink-0"></span>
+          <svg id="updateNavIcon" class="w-3.5 h-3.5 text-secondary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
           <span id="updateNavLabel">Updates</span>
         </button>
 
-        <!-- Settings Modal Trigger -->
-        <button id="openSettingsModalBtn" type="button"
-          class="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition"
-          title="Preferences &amp; Persistent Defaults">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <button id="openSettingsModalBtn" type="button" class="icon-btn" title="Preferences &amp; Persistent Defaults">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
 
-        <!-- About & GPLv3 License Modal Trigger -->
-        <button id="openAboutModalBtn" type="button"
-          class="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition"
-          title="About Resolv &amp; GNU GPLv3 License">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <button id="openAboutModalBtn" type="button" class="icon-btn" title="About Resolv &amp; GNU GPLv3 License">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
         </button>
       </div>
     </div>
   </header>
 
-  <!-- Main Content Container -->
-  <main class="max-w-7xl w-full mx-auto px-5 py-5 flex-1 flex flex-col gap-4">
+  <!-- Main Workspace -->
+  <main class="container-app py-5 flex-1 flex flex-col gap-3.5">
 
     <!-- Offline / OS Warning Banner -->
-    <section id="offlineBanner" class="hidden rounded-xl bg-amber-950/40 border border-amber-800/80 px-4 py-3 text-xs flex items-center justify-between gap-3">
-      <div class="flex items-center gap-2.5 text-amber-200">
-        <svg class="w-4 h-4 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <section id="offlineBanner" class="hidden banner-warn px-4 py-3 text-xs flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5 text-amber-soft">
+        <svg class="w-4 h-4 text-amber shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         <span id="offlineBannerText">No active network connection detected. Connect to Wi-Fi or Ethernet and click Refresh.</span>
       </div>
-      <button id="offlineRetryBtn" type="button" class="px-2.5 py-1 rounded bg-amber-900/60 hover:bg-amber-800/70 text-amber-100 font-mono text-[11px] shrink-0">
-        Re-check Network
-      </button>
+      <button id="offlineRetryBtn" type="button" class="btn-warn-sm font-mono shrink-0">Re-check Network</button>
     </section>
 
-    <!-- Hero Action Card (Active Network + Primary Speed Test Trigger) -->
-    <section class="rounded-xl bg-[#121215] border border-zinc-800/90 p-5">
-      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
-        <!-- Left: Detected OS, Active Interface, Current System DNS -->
+    <!-- Instrument Control Deck -->
+    <section class="panel p-4 sm:p-5">
+      <div class="flex flex-col lg:flex-row lg:items-stretch lg:justify-between gap-4">
+        <!-- Left: 3 Diagnostic Readout Modules -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
-          <!-- OS & Backend Card -->
-          <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 px-3.5 py-2.5">
-            <div class="flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-              <span>Operating System</span>
-              <span id="netBackendBadge" class="font-mono text-[10px] text-zinc-500">detecting…</span>
+          <!-- Module 1: Platform -->
+          <div class="subtile px-3.5 py-2.5 flex flex-col justify-between">
+            <div class="flex items-center justify-between text-micro font-mono uppercase">
+              <span>Platform</span>
+              <span id="netBackendBadge" class="text-muted">detecting…</span>
             </div>
-            <div id="osNameValue" class="mt-1 text-sm font-semibold text-zinc-100 truncate">Detecting OS…</div>
-            <div id="hostnameValue" class="mt-0.5 text-xs font-mono text-zinc-400 truncate">—</div>
+            <div id="osNameValue" class="mt-1 text-sm font-semibold text-primary truncate">Detecting OS…</div>
+            <div id="hostnameValue" class="mt-0.5 text-xs font-mono text-secondary truncate">—</div>
           </div>
 
-          <!-- Active Network Interface Card -->
-          <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 px-3.5 py-2.5">
-            <div class="flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-              <span>Active Interface</span>
-              <button id="refreshNetBtn" type="button" class="text-zinc-400 hover:text-emerald-400 transition" title="Re-detect active network interface">
+          <!-- Module 2: Active Interface -->
+          <div class="subtile px-3.5 py-2.5 flex flex-col justify-between">
+            <div class="flex items-center justify-between text-micro font-mono uppercase">
+              <span>Active Adapter</span>
+              <button id="refreshNetBtn" type="button" class="text-link-muted" title="Re-detect active network interface">
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
               </button>
             </div>
             <div class="mt-1 flex items-center gap-2">
-              <select id="interfaceSelect" aria-label="Select Network Interface"
-                class="w-full bg-transparent text-sm font-semibold text-zinc-100 focus:outline-none cursor-pointer truncate">
+              <select id="interfaceSelect" aria-label="Select Network Interface" class="adapter-select truncate">
                 <option value="">Detecting…</option>
               </select>
             </div>
-            <div id="interfaceMetaValue" class="mt-0.5 text-xs font-mono text-zinc-400 truncate">—</div>
+            <div id="interfaceMetaValue" class="mt-0.5 text-xs font-mono text-secondary truncate">—</div>
           </div>
 
-          <!-- Current DNS Card -->
-          <div class="rounded-lg bg-zinc-900/70 border border-zinc-800/80 px-3.5 py-2.5">
-            <div class="flex items-center justify-between gap-2 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-              <span>Current System DNS</span>
+          <!-- Module 3: Active System DNS -->
+          <div class="subtile px-3.5 py-2.5 flex flex-col justify-between">
+            <div class="flex items-center justify-between gap-2 text-micro font-mono uppercase">
+              <span>System DNS</span>
               <div class="flex items-center gap-1.5">
-                <span id="verifyResultBadge" class="hidden font-mono text-[10px] px-1.5 py-0.5 rounded"></span>
-                <span id="dnsModeBadge" class="font-mono text-[10px] px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300">Auto</span>
+                <span id="verifyResultBadge" class="hidden font-mono badge-tiny"></span>
+                <span id="dnsModeBadge" class="badge-mode font-mono">Auto</span>
               </div>
             </div>
-            <div id="currentDnsValue" class="mt-1 text-sm font-mono font-semibold text-emerald-400 truncate">—</div>
-            <div class="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px]">
-              <button id="verifyDnsBtn" type="button" class="text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline transition">
-                Verify Speed
-              </button>
-              <span class="text-zinc-700">·</span>
-              <button id="resetDnsBtn" type="button" class="text-zinc-400 hover:text-zinc-100 underline-offset-2 hover:underline transition">
-                Reset to DHCP
-              </button>
-              <span class="text-zinc-700">·</span>
-              <button id="flushCacheBtn" type="button" class="text-zinc-400 hover:text-zinc-100 underline-offset-2 hover:underline transition">
-                Flush Cache
-              </button>
+            <div id="currentDnsValue" class="mt-1 text-sm font-mono font-semibold text-emerald truncate">—</div>
+            <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+              <button id="verifyDnsBtn" type="button" class="action-link text-emerald">Verify Speed</button>
+              <span class="text-divider">·</span>
+              <button id="resetDnsBtn" type="button" class="action-link text-secondary">Reset DHCP</button>
+              <span class="text-divider">·</span>
+              <button id="flushCacheBtn" type="button" class="action-link text-secondary">Flush Cache</button>
             </div>
           </div>
         </div>
 
-        <!-- Right: Primary Benchmark CTA -->
-        <div class="flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center lg:items-end justify-between gap-2.5 shrink-0">
+        <!-- Right: Command Console with Speed Presets & Primary Trigger -->
+        <div class="cmd-console flex flex-col justify-between gap-2.5 shrink-0">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-micro font-mono uppercase">Depth Preset</span>
+            <div id="speedPresetGroup" class="preset-track inline-flex items-center p-0.5 rounded-md" role="group" aria-label="Benchmark Depth Preset">
+              <button type="button" data-preset="5" class="preset-chip" title="Fast 5 queries per domain">Quick</button>
+              <button type="button" data-preset="10" class="preset-chip active" title="Balanced 10 queries per domain">Standard</button>
+              <button type="button" data-preset="20" class="preset-chip" title="Deep 20 queries per domain">Deep</button>
+            </div>
+          </div>
+
           <div class="flex items-center gap-2">
-            <button id="runBenchmarkBtn" type="button"
-              class="px-5 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-zinc-950 font-semibold text-sm transition flex items-center justify-center gap-2">
-              <svg id="runIcon" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <button id="runBenchmarkBtn" type="button" class="btn-primary flex-1 justify-center">
+              <svg id="runIcon" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>
               <span id="runBtnLabel">Run Speed Test</span>
             </button>
-            <button id="cancelBenchmarkBtn" type="button"
-              class="hidden px-3.5 py-2.5 rounded-lg bg-rose-950/70 hover:bg-rose-900/70 border border-rose-800/70 text-rose-200 font-medium text-xs transition">
-              Stop
-            </button>
+            <button id="cancelBenchmarkBtn" type="button" class="hidden btn-stop">Stop</button>
           </div>
-          <div id="heroSubStatus" class="text-[11px] font-mono text-zinc-400 text-right">
-            Staggered Worker Pool · P95 &amp; Jitter · DNSSEC · AdBlock · Hijack Probe
+
+          <div id="heroSubStatus" class="text-[11px] font-mono text-muted text-right">
+            UDP :53 + DoH · DNSSEC · AdBlock · Hijack
           </div>
         </div>
       </div>
 
-      <!-- Pro / Nerd Benchmark Parameters Bar (Shown in Pro mode) -->
-      <div id="proConfigBar" class="hidden mt-4 pt-3.5 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-4 text-xs">
+      <!-- Pro / Nerd Parameters Bar -->
+      <div id="proConfigBar" class="hidden mt-4 pt-3.5 border-top-hairline flex flex-wrap items-center justify-between gap-4 text-xs">
         <div class="flex flex-wrap items-center gap-4">
-          <span class="font-mono text-[11px] uppercase tracking-wider text-zinc-400">Protocols:</span>
-          <label class="inline-flex items-center gap-1.5 cursor-pointer text-zinc-200">
-            <input type="checkbox" class="proto-checkbox accent-emerald-500 rounded" value="udp" checked />
+          <span class="font-mono text-micro uppercase">Protocols:</span>
+          <label class="inline-flex items-center gap-1.5 cursor-pointer text-primary">
+            <input type="checkbox" class="proto-checkbox checkbox-accent" value="udp" checked />
             <span class="font-mono">UDP :53</span>
           </label>
-          <label class="inline-flex items-center gap-1.5 cursor-pointer text-zinc-200">
-            <input type="checkbox" class="proto-checkbox accent-emerald-500 rounded" value="doh" checked />
+          <label class="inline-flex items-center gap-1.5 cursor-pointer text-primary">
+            <input type="checkbox" class="proto-checkbox checkbox-accent" value="doh" checked />
             <span class="font-mono">DoH (RFC 8484)</span>
           </label>
-          <label class="inline-flex items-center gap-1.5 cursor-pointer text-zinc-200">
-            <input type="checkbox" class="proto-checkbox accent-emerald-500 rounded" value="dot" />
+          <label class="inline-flex items-center gap-1.5 cursor-pointer text-primary">
+            <input type="checkbox" class="proto-checkbox checkbox-accent" value="dot" />
             <span class="font-mono">DoT :853</span>
           </label>
-          <label class="inline-flex items-center gap-1.5 cursor-pointer text-zinc-200">
-            <input type="checkbox" class="proto-checkbox accent-emerald-500 rounded" value="tcp" />
+          <label class="inline-flex items-center gap-1.5 cursor-pointer text-primary">
+            <input type="checkbox" class="proto-checkbox checkbox-accent" value="tcp" />
             <span class="font-mono">TCP :53</span>
           </label>
         </div>
 
         <div class="flex flex-wrap items-center gap-4">
-          <label class="inline-flex items-center gap-1.5 text-zinc-300">
-            <span class="text-zinc-400">Queries / Server:</span>
-            <select id="optQueries" class="bg-zinc-900 border border-zinc-800 rounded px-2 py-1 font-mono text-xs text-zinc-100">
-              <option value="5">5 (Fast)</option>
+          <label class="inline-flex items-center gap-1.5 text-secondary">
+            <span>Queries:</span>
+            <select id="optQueries" class="input-select font-mono text-xs">
+              <option value="5">5 (Quick)</option>
               <option value="10" selected>10 (Standard)</option>
               <option value="20">20 (Deep)</option>
             </select>
           </label>
-          <label class="inline-flex items-center gap-1.5 text-zinc-300">
-            <span class="text-zinc-400">Timeout:</span>
-            <select id="optTimeout" class="bg-zinc-900 border border-zinc-800 rounded px-2 py-1 font-mono text-xs text-zinc-100">
+          <label class="inline-flex items-center gap-1.5 text-secondary">
+            <span>Timeout:</span>
+            <select id="optTimeout" class="input-select font-mono text-xs">
               <option value="1200">1200 ms</option>
               <option value="2000" selected>2000 ms</option>
               <option value="3500">3500 ms</option>
             </select>
           </label>
-          <label class="inline-flex items-center gap-1.5 cursor-pointer text-zinc-300">
-            <input id="optIntegrity" type="checkbox" class="accent-emerald-500 rounded" checked />
+          <label class="inline-flex items-center gap-1.5 cursor-pointer text-secondary">
+            <input id="optIntegrity" type="checkbox" class="checkbox-accent" checked />
             <span>DNSSEC, AdBlock &amp; Hijack Probes</span>
           </label>
         </div>
       </div>
 
-      <!-- Live Benchmark Progress Bar -->
-      <div id="progressContainer" class="hidden mt-4 pt-3.5 border-t border-zinc-800/80">
+      <!-- Live Benchmark Progress Track -->
+      <div id="progressContainer" class="hidden mt-4 pt-3.5 border-top-hairline">
         <div class="flex items-center justify-between text-xs mb-1.5">
           <div class="flex items-center gap-2">
-            <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-            <span id="progressPhaseBadge" class="font-mono uppercase text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-emerald-300">BENCHMARK</span>
-            <span id="progressMessage" class="text-zinc-300 font-medium">Sending staggered DNS queries…</span>
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-dot"></span>
+            <span id="progressPhaseBadge" class="badge-phase font-mono uppercase">BENCHMARK</span>
+            <span id="progressMessage" class="text-primary font-medium">Sending staggered DNS queries…</span>
           </div>
-          <span id="progressCount" class="font-mono text-zinc-400">0 / 0</span>
+          <span id="progressCount" class="font-mono text-secondary">0 / 0</span>
         </div>
-        <div class="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800/80">
-          <div id="progressBar" class="h-full bg-emerald-500 transition-all duration-150" style="width: 0%"></div>
+        <div class="progress-track">
+          <div id="progressBar" class="progress-fill" style="width: 0%"></div>
         </div>
       </div>
     </section>
 
     <!-- Status / Action Toast Banner -->
-    <div id="statusToast" class="hidden rounded-xl border px-4 py-3 text-xs flex items-center justify-between gap-3">
+    <div id="statusToast" class="hidden toast-banner px-4 py-3 text-xs flex items-center justify-between gap-3">
       <div id="statusToastText" class="font-medium"></div>
-      <button id="statusToastClose" type="button" class="text-zinc-400 hover:text-zinc-200 font-mono text-xs">Dismiss</button>
+      <button id="statusToastClose" type="button" class="action-link font-mono text-xs shrink-0">Dismiss</button>
     </div>
 
-    <!-- ISP DNS Hijacking & Tampering Warning Banner -->
-    <section id="hijackBanner" class="hidden rounded-xl bg-rose-950/35 border border-rose-800/80 p-4">
+    <!-- ISP DNS Hijacking Warning Banner -->
+    <section id="hijackBanner" class="hidden banner-danger p-4">
       <div class="flex items-start gap-3">
-        <div class="p-2 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 shrink-0">
+        <div class="icon-box-danger shrink-0">
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         </div>
         <div class="flex-1">
           <div class="flex items-center gap-2">
-            <h2 class="text-sm font-semibold text-rose-200">ISP DNS Hijacking / Transparent Proxy Detected</h2>
-            <span id="hijackCountBadge" class="font-mono text-[11px] px-2 py-0.5 rounded bg-rose-900/70 text-rose-200"></span>
+            <h2 class="text-sm font-semibold text-rose-soft">ISP DNS Hijacking / Transparent Proxy Detected</h2>
+            <span id="hijackCountBadge" class="badge-rose font-mono badge-tiny"></span>
           </div>
-          <p id="hijackSummaryText" class="mt-1 text-xs text-rose-200/90 leading-relaxed"></p>
+          <p id="hijackSummaryText" class="mt-1 text-xs text-rose-muted leading-relaxed"></p>
         </div>
       </div>
     </section>
 
-    <!-- Winner Recommendation Banner -->
-    <section id="winnerBanner" class="hidden rounded-xl bg-[#121215] border border-emerald-800/70 p-4">
+    <!-- Winner Recommendation Instrument Card -->
+    <section id="winnerBanner" class="hidden winner-panel p-4">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div class="flex items-start gap-3.5">
-          <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-300 font-mono font-bold text-sm shrink-0">
-            #1
-          </div>
+          <div class="winner-rank-badge font-mono shrink-0">#1</div>
           <div>
             <div class="flex flex-wrap items-center gap-2">
-              <span class="text-[11px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Recommended DNS</span>
-              <span id="winnerAvgBadge" class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-200"></span>
+              <span class="badge-emerald font-mono badge-tiny uppercase">Recommended DNS</span>
+              <span id="winnerAvgBadge" class="badge-emerald font-mono font-semibold badge-tiny"></span>
             </div>
-            <h2 id="winnerHeadline" class="mt-1.5 text-base font-semibold text-zinc-100"></h2>
-            <p id="winnerDetail" class="mt-0.5 text-xs text-zinc-400 font-mono"></p>
+            <h2 id="winnerHeadline" class="mt-1.5 text-base font-semibold text-primary"></h2>
+            <p id="winnerDetail" class="mt-0.5 text-xs text-secondary font-mono"></p>
           </div>
         </div>
         <div class="flex items-center gap-2 shrink-0">
-          <button id="winnerCopyBtn" type="button"
-            class="px-3 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-medium text-zinc-200 transition">
-            Copy IPs
-          </button>
-          <button id="winnerApplyBtn" type="button"
-            class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold text-xs transition">
-            Apply Best DNS
-          </button>
+          <button id="winnerCopyBtn" type="button" class="btn-secondary">Copy Endpoints</button>
+          <button id="winnerApplyBtn" type="button" class="btn-primary btn-sm">Apply Best DNS</button>
         </div>
       </div>
     </section>
 
     <!-- Post-Benchmark KPI Telemetry Strip -->
     <section id="kpiSummaryStrip" class="hidden grid grid-cols-2 lg:grid-cols-4 gap-3">
-      <div class="rounded-xl bg-[#121215] border border-zinc-800/90 px-4 py-3">
-        <div class="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Fastest Overall</div>
-        <div id="kpiFastestVal" class="mt-1 text-sm font-semibold text-emerald-300 truncate">—</div>
-        <div id="kpiFastestSub" class="mt-0.5 text-[11px] font-mono text-zinc-400 truncate">—</div>
+      <div class="panel px-4 py-3">
+        <div class="text-micro font-mono uppercase">Fastest Overall</div>
+        <div id="kpiFastestVal" class="mt-1 text-sm font-semibold text-emerald truncate font-mono">—</div>
+        <div id="kpiFastestSub" class="mt-0.5 text-[11px] font-mono text-secondary truncate">—</div>
       </div>
-      <div class="rounded-xl bg-[#121215] border border-zinc-800/90 px-4 py-3">
-        <div class="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Fastest Edge Cache</div>
-        <div id="kpiCachedVal" class="mt-1 text-sm font-semibold text-zinc-100 truncate">—</div>
-        <div id="kpiCachedSub" class="mt-0.5 text-[11px] font-mono text-zinc-400 truncate">—</div>
+      <div class="panel px-4 py-3">
+        <div class="text-micro font-mono uppercase">Fastest Edge Cache</div>
+        <div id="kpiCachedVal" class="mt-1 text-sm font-semibold text-primary truncate font-mono">—</div>
+        <div id="kpiCachedSub" class="mt-0.5 text-[11px] font-mono text-secondary truncate">—</div>
       </div>
-      <div class="rounded-xl bg-[#121215] border border-zinc-800/90 px-4 py-3">
-        <div class="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Fastest Recursive (UUID)</div>
-        <div id="kpiUncachedVal" class="mt-1 text-sm font-semibold text-cyan-300 truncate">—</div>
-        <div id="kpiUncachedSub" class="mt-0.5 text-[11px] font-mono text-zinc-400 truncate">—</div>
+      <div class="panel px-4 py-3">
+        <div class="text-micro font-mono uppercase">Fastest Recursive (UUID)</div>
+        <div id="kpiUncachedVal" class="mt-1 text-sm font-semibold text-cyan truncate font-mono">—</div>
+        <div id="kpiUncachedSub" class="mt-0.5 text-[11px] font-mono text-secondary truncate">—</div>
       </div>
-      <div class="rounded-xl bg-[#121215] border border-zinc-800/90 px-4 py-3">
-        <div class="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Security &amp; Filtering Audit</div>
-        <div id="kpiSecurityVal" class="mt-1 text-sm font-semibold text-zinc-100 truncate">—</div>
-        <div id="kpiSecuritySub" class="mt-0.5 text-[11px] font-mono text-zinc-400 truncate">—</div>
+      <div class="panel px-4 py-3">
+        <div class="text-micro font-mono uppercase">Security &amp; Filtering</div>
+        <div id="kpiSecurityVal" class="mt-1 text-sm font-semibold text-primary truncate font-mono">—</div>
+        <div id="kpiSecuritySub" class="mt-0.5 text-[11px] font-mono text-secondary truncate">—</div>
       </div>
     </section>
 
-    <!-- Filter, Search & Sort Bar -->
+    <!-- Category Filters, Search, Sort & Tier Legend -->
     <section class="flex flex-wrap items-center justify-between gap-3 pt-1">
       <div class="flex flex-wrap items-center gap-1.5" id="categoryFilterGroup">
-        <button type="button" data-cat="all" class="cat-chip active px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-800 text-zinc-100 border border-zinc-700">All Resolvers</button>
-        <button type="button" data-cat="Privacy" class="cat-chip px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800">Privacy</button>
-        <button type="button" data-cat="Ad-blocking" class="cat-chip px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800">Ad-blocking</button>
-        <button type="button" data-cat="Standard" class="cat-chip px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800">Standard</button>
-        <button type="button" data-cat="Family" class="cat-chip px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800">Family</button>
-        <button type="button" data-cat="Custom" class="cat-chip px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800">Custom</button>
+        <button type="button" data-cat="all" class="cat-chip active">All Resolvers</button>
+        <button type="button" data-cat="Privacy" class="cat-chip">Privacy</button>
+        <button type="button" data-cat="Ad-blocking" class="cat-chip">Ad-blocking</button>
+        <button type="button" data-cat="Standard" class="cat-chip">Standard</button>
+        <button type="button" data-cat="Family" class="cat-chip">Family</button>
+        <button type="button" data-cat="Custom" class="cat-chip">Custom</button>
       </div>
 
-      <!-- Quick Search, Sort & Latency Legend -->
-      <div class="flex flex-wrap items-center gap-2.5 text-[11px] font-mono text-zinc-400">
+      <div class="flex flex-wrap items-center gap-2.5 text-[11px] font-mono text-secondary">
         <div class="relative">
-          <input id="searchResolverInput" type="text" placeholder="Filter name or IP… (/)"
-            class="w-44 rounded-md bg-zinc-900/90 border border-zinc-800 px-2.5 py-1 text-xs font-sans text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500" />
+          <input id="searchResolverInput" type="text" placeholder="Filter name or IP… (/)" class="search-input" />
         </div>
-        <select id="sortSelect" aria-label="Sort Resolvers"
-          class="rounded-md bg-zinc-900/90 border border-zinc-800 px-2 py-1 text-xs font-sans text-zinc-200 focus:outline-none focus:border-emerald-500">
+        <select id="sortSelect" aria-label="Sort Resolvers" class="input-select text-xs">
           <option value="rank">Sort: Overall Rank</option>
           <option value="avg">Sort: Fastest Avg</option>
           <option value="p95">Sort: Lowest P95</option>
@@ -371,30 +328,30 @@
           <option value="uncached">Sort: Fastest Uncached</option>
           <option value="jitter">Sort: Lowest Jitter</option>
         </select>
-        <span class="hidden xl:inline text-zinc-700">|</span>
-        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>&lt;20ms</span>
-        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400"></span>20–60ms</span>
-        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-400"></span>&gt;60ms</span>
+        <span class="hidden xl:inline text-divider">|</span>
+        <span class="inline-flex items-center gap-1"><span class="legend-dot dot-emerald"></span>&lt;20ms</span>
+        <span class="inline-flex items-center gap-1"><span class="legend-dot dot-amber"></span>20–60ms</span>
+        <span class="inline-flex items-center gap-1"><span class="legend-dot dot-rose"></span>&gt;60ms</span>
       </div>
     </section>
 
-    <!-- SIMPLE MODE VIEW: Clean Ranking List with Inline SVG Range Bars & Expandable Drawers -->
+    <!-- SIMPLE VIEW: Ranking List with Bullet Range Gauges & Sparklines -->
     <section id="simpleViewSection" class="flex-1 flex flex-col gap-2">
       <div id="simpleListContainer" class="flex flex-col gap-2"></div>
     </section>
 
-    <!-- PRO / NERD MODE VIEW: Full Protocol, Sparkline & Security Telemetry Matrix Table -->
+    <!-- PRO / TELEMETRY VIEW: Full Protocol & Security Matrix -->
     <section id="proViewSection" class="hidden flex-1">
-      <div class="rounded-xl bg-[#121215] border border-zinc-800/90 overflow-hidden">
+      <div class="panel overflow-hidden">
         <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse text-xs">
+          <table class="pro-table w-full text-left border-collapse text-xs">
             <thead>
-              <tr id="proTableHeadRow" class="border-b border-zinc-800 bg-zinc-900/70 font-mono text-[11px] uppercase tracking-wider text-zinc-400">
+              <tr id="proTableHeadRow" class="pro-thead font-mono text-micro uppercase">
                 <th class="py-3 px-3">#</th>
                 <th class="py-3 px-3">Resolver</th>
                 <th class="py-3 px-2.5 text-right">Avg (ms)</th>
                 <th class="py-3 px-2.5 text-right">P95</th>
-                <th class="py-3 px-3">Latency Sparkline &amp; Range (Min–Avg–Max)</th>
+                <th class="py-3 px-3">Latency Range (Min–Avg–P95–Max)</th>
                 <th class="py-3 px-2.5 text-right">Cached</th>
                 <th class="py-3 px-2.5 text-right">Uncached</th>
                 <th class="py-3 px-2.5 text-right">Jitter (σ)</th>
@@ -407,7 +364,7 @@
                 <th class="py-3 px-3 text-right">Action</th>
               </tr>
             </thead>
-            <tbody id="proTableBody" class="divide-y divide-zinc-800/70"></tbody>
+            <tbody id="proTableBody" class="pro-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -415,312 +372,316 @@
 
   </main>
 
-  <!-- Footer -->
-  <footer class="border-t border-zinc-900 py-3 px-5 text-[11px] text-zinc-500">
-    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-      <div>Resolv — Pure-Go DNS Benchmark (UDP · TCP · DoH · DoT), DNSSEC &amp; AdBlock Probe, ISP Hijack Detection.</div>
-      <div class="font-mono">SPDX-License-Identifier: GPL-3.0-or-later</div>
+  <!-- Compact Keyboard Shortcut & License Footer -->
+  <footer class="app-footer py-3 px-5 text-[11px]">
+    <div class="container-app flex flex-wrap items-center justify-between gap-2">
+      <div class="flex flex-wrap items-center gap-3 text-muted">
+        <span>Pure-Go DNS Engine (UDP · TCP · DoH · DoT)</span>
+        <span class="hidden md:inline-flex items-center gap-1.5">
+          <kbd class="kbd-cap">/</kbd> Search
+          <kbd class="kbd-cap">Alt+1</kbd> Simple
+          <kbd class="kbd-cap">Alt+2</kbd> Pro
+          <kbd class="kbd-cap">Esc</kbd> Close
+        </span>
+      </div>
+      <div class="font-mono text-muted">SPDX-License-Identifier: GPL-3.0-or-later</div>
     </div>
   </footer>
 
   <!-- MODAL 1: Add Custom DNS Server -->
-  <div id="customDnsModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="w-full max-w-md rounded-2xl bg-[#121215] border border-zinc-800 shadow-2xl p-5">
-      <div class="flex items-center justify-between pb-3 border-b border-zinc-800">
-        <h3 class="text-sm font-semibold text-zinc-100">Add Custom DNS Resolver</h3>
-        <button type="button" data-close-modal="customDnsModal" class="text-zinc-400 hover:text-zinc-200">✕</button>
+  <div id="customDnsModal" class="hidden modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-dialog w-full max-w-md p-5">
+      <div class="modal-header flex items-center justify-between pb-3">
+        <h3 class="text-sm font-semibold text-primary">Add Custom DNS Resolver</h3>
+        <button type="button" data-close-modal="customDnsModal" class="modal-close" aria-label="Close">✕</button>
       </div>
       <form id="customDnsForm" class="mt-4 flex flex-col gap-3.5 text-xs">
         <div>
-          <label class="block text-zinc-300 font-medium mb-1" for="customNameInput">Display Name</label>
-          <input id="customNameInput" type="text" placeholder="e.g., My NextDNS Profile or Corporate Resolver"
-            class="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-zinc-100 focus:outline-none focus:border-emerald-500" />
+          <label class="block text-secondary font-medium mb-1" for="customNameInput">Display Name</label>
+          <input id="customNameInput" type="text" placeholder="e.g., NextDNS Profile or Corporate DNS" class="input-field w-full" />
         </div>
         <div>
-          <label class="block text-zinc-300 font-medium mb-1" for="customEndpointInput">Addresses / Endpoints</label>
+          <label class="block text-secondary font-medium mb-1" for="customEndpointInput">Addresses / Endpoints</label>
           <input id="customEndpointInput" type="text" required
             placeholder="e.g., 1.1.1.2, 1.0.0.2, https://security.cloudflare-dns.com/dns-query"
-            class="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 font-mono text-zinc-100 focus:outline-none focus:border-emerald-500" />
-          <p class="mt-1.5 text-[11px] text-zinc-400 leading-relaxed">
-            Enter one or more comma-separated IPv4 addresses, IPv6 addresses, a DoH URL (<code class="text-zinc-300">https://…</code>), or a DoT hostname (<code class="text-zinc-300">tls://…</code>).
+            class="input-field w-full font-mono" />
+          <p class="mt-1.5 text-[11px] text-secondary leading-relaxed">
+            Enter comma-separated IPv4 addresses, IPv6 addresses, a DoH URL (<code class="text-primary">https://…</code>), or a DoT hostname (<code class="text-primary">tls://…</code>).
           </p>
         </div>
-        <div id="customDnsError" class="hidden rounded-lg bg-rose-950/60 border border-rose-800 px-3 py-2 text-rose-200"></div>
+        <div id="customDnsError" class="hidden banner-danger px-3 py-2 text-rose-soft"></div>
         <div class="flex items-center justify-end gap-2 pt-2">
-          <button type="button" data-close-modal="customDnsModal"
-            class="px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300">Cancel</button>
-          <button type="submit"
-            class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold">Add Resolver</button>
+          <button type="button" data-close-modal="customDnsModal" class="btn-secondary">Cancel</button>
+          <button type="submit" class="btn-primary btn-sm">Add Resolver</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- MODAL 2: Manual DNS Fallback / Copy DNS Addresses -->
-  <div id="manualFallbackModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="w-full max-w-lg rounded-2xl bg-[#121215] border border-zinc-800 shadow-2xl p-5 text-xs">
-      <div class="flex items-center justify-between pb-3 border-b border-zinc-800">
-        <h3 id="manualModalTitle" class="text-sm font-semibold text-zinc-100">Copy DNS Addresses / Manual Setup</h3>
-        <button type="button" data-close-modal="manualFallbackModal" class="text-zinc-400 hover:text-zinc-200">✕</button>
+  <!-- MODAL 2: Copy Endpoints / Manual Setup -->
+  <div id="manualFallbackModal" class="hidden modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-dialog w-full max-w-lg p-5 text-xs">
+      <div class="modal-header flex items-center justify-between pb-3">
+        <h3 id="manualModalTitle" class="text-sm font-semibold text-primary">DNS Endpoints &amp; Manual Setup</h3>
+        <button type="button" data-close-modal="manualFallbackModal" class="modal-close" aria-label="Close">✕</button>
       </div>
-      <p id="manualModalMessage" class="mt-3 text-zinc-300 leading-relaxed"></p>
+      <p id="manualModalMessage" class="mt-3 text-secondary leading-relaxed"></p>
 
       <div class="mt-4">
-        <div class="flex items-center justify-between text-[11px] font-mono uppercase text-zinc-400 mb-1">
-          <span>DNS Server Addresses</span>
-          <button id="copyAddressesBtn" type="button" class="text-emerald-400 hover:underline">Copy Addresses</button>
+        <div class="flex items-center justify-between text-micro font-mono uppercase mb-1">
+          <span>DNS IP Addresses (IPv4 / IPv6)</span>
+          <button id="copyAddressesBtn" type="button" class="action-link text-emerald">Copy Addresses</button>
         </div>
-        <div id="manualAddressesBox" class="rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2.5 font-mono text-sm text-emerald-300 select-all"></div>
+        <div id="manualAddressesBox" class="code-box font-mono text-sm text-emerald select-all"></div>
       </div>
 
-      <div class="mt-4">
-        <div class="flex items-center justify-between text-[11px] font-mono uppercase text-zinc-400 mb-1">
+      <div id="manualDoHRow" class="hidden mt-3">
+        <div class="flex items-center justify-between text-micro font-mono uppercase mb-1">
+          <span>DNS-over-HTTPS (DoH URL)</span>
+          <button id="copyManualDoHBtn" type="button" class="action-link text-cyan">Copy DoH URL</button>
+        </div>
+        <div id="manualDoHBox" class="code-box font-mono text-[11px] text-cyan select-all truncate"></div>
+      </div>
+
+      <div id="manualDoTRow" class="hidden mt-3">
+        <div class="flex items-center justify-between text-micro font-mono uppercase mb-1">
+          <span>DNS-over-TLS (DoT Hostname)</span>
+          <button id="copyManualDoTBtn" type="button" class="action-link text-primary">Copy DoT Host</button>
+        </div>
+        <div id="manualDoTBox" class="code-box font-mono text-[11px] text-primary select-all truncate"></div>
+      </div>
+
+      <div class="mt-3">
+        <div class="flex items-center justify-between text-micro font-mono uppercase mb-1">
           <span>Terminal Command (Admin / Root)</span>
-          <button id="copyCommandBtn" type="button" class="text-emerald-400 hover:underline">Copy Command</button>
+          <button id="copyCommandBtn" type="button" class="action-link text-emerald">Copy Command</button>
         </div>
-        <pre id="manualCommandBox" class="rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2.5 font-mono text-[11px] text-zinc-200 overflow-x-auto select-all whitespace-pre-wrap"></pre>
+        <pre id="manualCommandBox" class="code-box font-mono text-[11px] text-primary overflow-x-auto select-all whitespace-pre-wrap"></pre>
       </div>
 
       <div class="mt-4">
-        <div class="text-[11px] font-mono uppercase text-zinc-400 mb-1.5">Manual OS Steps</div>
-        <ol id="manualStepsList" class="list-decimal list-inside space-y-1 text-zinc-300"></ol>
+        <div class="text-micro font-mono uppercase mb-1.5">Manual OS Steps</div>
+        <ol id="manualStepsList" class="list-decimal list-inside space-y-1 text-secondary"></ol>
       </div>
 
       <div class="mt-5 flex justify-end">
-        <button type="button" data-close-modal="manualFallbackModal"
-          class="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-medium">Done</button>
+        <button type="button" data-close-modal="manualFallbackModal" class="btn-secondary">Done</button>
       </div>
     </div>
   </div>
 
   <!-- MODAL 3: Export Preview & Save -->
-  <div id="exportModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="w-full max-w-3xl rounded-2xl bg-[#121215] border border-zinc-800 shadow-2xl p-5 text-xs flex flex-col max-h-[85vh]">
-      <div class="flex items-center justify-between pb-3 border-b border-zinc-800">
-        <h3 id="exportModalTitle" class="text-sm font-semibold text-zinc-100">Export Benchmark Report</h3>
-        <button type="button" data-close-modal="exportModal" class="text-zinc-400 hover:text-zinc-200">✕</button>
+  <div id="exportModal" class="hidden modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-dialog w-full max-w-3xl p-5 text-xs flex flex-col max-h-[85vh]">
+      <div class="modal-header flex items-center justify-between pb-3">
+        <h3 id="exportModalTitle" class="text-sm font-semibold text-primary">Export Benchmark Report</h3>
+        <button type="button" data-close-modal="exportModal" class="modal-close" aria-label="Close">✕</button>
       </div>
-      <textarea id="exportTextarea" readonly
-        class="mt-3 w-full flex-1 min-h-[300px] rounded-lg bg-zinc-950 border border-zinc-800 p-3 font-mono text-[11px] text-zinc-200 focus:outline-none"></textarea>
+      <textarea id="exportTextarea" readonly class="code-area mt-3 w-full flex-1 font-mono text-[11px]"></textarea>
       <div class="mt-4 flex items-center justify-between gap-2">
-        <span id="exportStatusHint" class="text-zinc-400 font-mono"></span>
+        <span id="exportStatusHint" class="text-secondary font-mono"></span>
         <div class="flex items-center gap-2">
-          <button id="copyExportBtn" type="button"
-            class="px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium">Copy to Clipboard</button>
-          <button id="saveExportFileBtn" type="button"
-            class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold">Save to File…</button>
+          <button id="copyExportBtn" type="button" class="btn-secondary">Copy to Clipboard</button>
+          <button id="saveExportFileBtn" type="button" class="btn-primary btn-sm">Save to File…</button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- MODAL 4: About Resolv & GNU GPLv3 License -->
-  <div id="aboutModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="w-full max-w-lg rounded-2xl bg-[#121215] border border-zinc-800 shadow-2xl p-5 text-xs">
-      <div class="flex items-center justify-between pb-3 border-b border-zinc-800">
+  <div id="aboutModal" class="hidden modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-dialog w-full max-w-lg p-5 text-xs">
+      <div class="modal-header flex items-center justify-between pb-3">
         <div class="flex items-center gap-3">
-          <img src="icon.svg" alt="Resolv" class="w-9 h-9 rounded-xl border border-zinc-800" />
+          <img src="icon.svg" alt="Resolv" class="w-9 h-9 rounded-xl border-hairline" />
           <div>
-            <h3 class="text-sm font-semibold text-zinc-100">Resolv</h3>
-            <p id="aboutVersionArch" class="font-mono text-[11px] text-zinc-400">v1.1.1 · Cross-Platform Wails v2 Desktop App</p>
+            <h3 class="text-sm font-semibold text-primary">Resolv</h3>
+            <p id="aboutVersionArch" class="font-mono text-[11px] text-secondary">v1.2.0 · Cross-Platform Portable App</p>
           </div>
         </div>
-        <button type="button" data-close-modal="aboutModal" class="text-zinc-400 hover:text-zinc-200">✕</button>
+        <button type="button" data-close-modal="aboutModal" class="modal-close" aria-label="Close">✕</button>
       </div>
 
-      <div class="mt-4 space-y-3 text-zinc-300 leading-relaxed">
+      <div class="mt-4 space-y-3 text-secondary leading-relaxed">
         <p>
-          <strong>Resolv</strong> is a free, open-source, cross-platform DNS benchmarking, privacy-probing, and switching utility built with Go, <code class="text-zinc-200">github.com/miekg/dns</code>, and Wails v2.
+          <strong class="text-primary">Resolv</strong> is a free, open-source, portable DNS benchmarking, privacy-probing, and switching utility built with Go, <code class="text-primary">github.com/miekg/dns</code>, and Wails v2.
         </p>
-        <div class="rounded-lg bg-zinc-900 border border-zinc-800 p-3 font-mono text-[11px] text-zinc-300 space-y-1.5">
-          <div class="text-emerald-400 font-semibold">GNU General Public License v3.0 (GPL-3.0-or-later)</div>
+        <div class="subtile p-3 font-mono text-[11px] space-y-1.5">
+          <div class="text-emerald font-semibold">GNU General Public License v3.0 (GPL-3.0-or-later)</div>
           <p>
             This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
           </p>
           <p>
-            This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the <code class="text-zinc-200">LICENSE</code> file for full details.
+            This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the <code class="text-primary">LICENSE</code> file for details.
           </p>
         </div>
-        <div class="flex items-center justify-between pt-1 text-[11px] font-mono text-zinc-400">
+        <div class="flex items-center justify-between pt-1 text-[11px] font-mono text-secondary">
           <span>Repository:</span>
-          <a id="aboutRepoLink" href="https://github.com/efeartn/Resolv" target="_blank" rel="noreferrer" class="text-emerald-400 hover:underline">
+          <a id="aboutRepoLink" href="https://github.com/efeartn/Resolv" target="_blank" rel="noreferrer" class="text-emerald action-link">
             https://github.com/efeartn/Resolv
           </a>
         </div>
       </div>
 
       <div class="mt-5 flex justify-end">
-        <button type="button" data-close-modal="aboutModal"
-          class="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-medium">Close</button>
+        <button type="button" data-close-modal="aboutModal" class="btn-secondary">Close</button>
       </div>
     </div>
   </div>
 
   <!-- MODAL 5: Software Update & SHA-256 Self-Updater -->
-  <div id="updateModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="w-full max-w-lg rounded-2xl bg-[#121215] border border-zinc-800 shadow-2xl p-5 text-xs flex flex-col max-h-[85vh]">
-      <div class="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
+  <div id="updateModal" class="hidden modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-dialog w-full max-w-lg p-5 text-xs flex flex-col max-h-[85vh]">
+      <div class="modal-header flex items-center justify-between pb-3 shrink-0">
         <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+          <div class="icon-box-emerald">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </div>
           <div>
-            <h3 class="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+            <h3 class="text-sm font-semibold text-primary flex items-center gap-2">
               <span>Software Update</span>
-              <span id="updateModalBadge" class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">Ready</span>
+              <span id="updateModalBadge" class="badge-mode font-mono">Ready</span>
             </h3>
-            <p id="updateStatusSubtitle" class="text-[11px] text-zinc-400">Signed release check via GitHub Releases &amp; SHA-256 manifest</p>
+            <p id="updateStatusSubtitle" class="text-[11px] text-secondary">Verified release check via GitHub Releases &amp; SHA-256 manifest</p>
           </div>
         </div>
-        <button type="button" data-close-modal="updateModal" class="text-zinc-400 hover:text-zinc-200">✕</button>
+        <button type="button" data-close-modal="updateModal" class="modal-close" aria-label="Close">✕</button>
       </div>
 
       <div class="mt-4 grid grid-cols-2 gap-2.5 shrink-0">
-        <div class="rounded-lg bg-zinc-900/80 border border-zinc-800 px-3 py-2">
-          <div class="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Installed Version</div>
-          <div id="updateCurrentVer" class="mt-0.5 font-mono text-sm font-semibold text-zinc-200">v1.1.1</div>
+        <div class="subtile px-3 py-2">
+          <div class="text-micro font-mono uppercase">Installed Version</div>
+          <div id="updateCurrentVer" class="mt-0.5 font-mono text-sm font-semibold text-primary">v1.2.0</div>
         </div>
-        <div class="rounded-lg bg-zinc-900/80 border border-zinc-800 px-3 py-2">
-          <div class="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Latest on GitHub</div>
-          <div id="updateLatestVer" class="mt-0.5 font-mono text-sm font-semibold text-emerald-400">—</div>
+        <div class="subtile px-3 py-2">
+          <div class="text-micro font-mono uppercase">Latest on GitHub</div>
+          <div id="updateLatestVer" class="mt-0.5 font-mono text-sm font-semibold text-emerald">—</div>
         </div>
       </div>
 
-      <div id="updateStatusTitle" class="mt-3 text-xs font-medium text-zinc-200 shrink-0">Click Check Now to query GitHub Releases.</div>
+      <div id="updateStatusTitle" class="mt-3 text-xs font-medium text-primary shrink-0">Click Check Now to query GitHub Releases.</div>
 
-      <div id="updateAssetMeta" class="hidden mt-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800 px-3 py-2 font-mono text-[11px] text-zinc-400 flex flex-wrap items-center justify-between gap-2 shrink-0">
-        <span id="updateAssetName" class="text-zinc-200 truncate">—</span>
+      <div id="updateAssetMeta" class="hidden mt-2.5 subtile px-3 py-2 font-mono text-[11px] text-secondary flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <span id="updateAssetName" class="text-primary truncate">—</span>
         <div class="flex items-center gap-2">
           <span id="updateAssetSize">—</span>
-          <span class="text-zinc-700">·</span>
-          <span id="updateAssetSha" class="text-emerald-400">SHA-256 —</span>
+          <span class="text-divider">·</span>
+          <span id="updateAssetSha" class="text-emerald">SHA-256 —</span>
         </div>
       </div>
 
       <div class="mt-3 flex-1 min-h-[120px] flex flex-col overflow-hidden">
-        <div class="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5">Release Notes</div>
-        <pre id="updateReleaseNotes" class="flex-1 overflow-y-auto rounded-lg bg-zinc-950 border border-zinc-800 p-3 font-sans text-[12px] text-zinc-300 whitespace-pre-wrap leading-relaxed select-text">No changelog loaded yet.</pre>
+        <div class="text-micro font-mono uppercase mb-1.5">Release Notes</div>
+        <pre id="updateReleaseNotes" class="code-box flex-1 overflow-y-auto font-sans text-[12px] text-secondary whitespace-pre-wrap leading-relaxed select-text">No changelog loaded yet.</pre>
       </div>
 
-      <div id="updateNoteBox" class="hidden mt-3 rounded-lg bg-amber-950/40 border border-amber-800/60 px-3 py-2 text-[11px] text-amber-200 leading-relaxed shrink-0"></div>
+      <div id="updateNoteBox" class="hidden mt-3 banner-warn px-3 py-2 text-[11px] text-amber-soft leading-relaxed shrink-0"></div>
 
-      <div id="updateProgressBox" class="hidden mt-3 rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2.5 shrink-0">
+      <div id="updateProgressBox" class="hidden mt-3 subtile px-3 py-2.5 shrink-0">
         <div class="flex items-center justify-between text-[11px] font-mono mb-1.5">
-          <span id="updateProgressLabel" class="text-emerald-300 truncate">Downloading...</span>
-          <span id="updateProgressPct" class="text-zinc-300">0%</span>
+          <span id="updateProgressLabel" class="text-emerald truncate">Downloading...</span>
+          <span id="updateProgressPct" class="text-primary">0%</span>
         </div>
-        <div class="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
-          <div id="updateProgressBar" class="h-full bg-emerald-400 transition-all duration-150" style="width: 0%"></div>
+        <div class="progress-track">
+          <div id="updateProgressBar" class="progress-fill" style="width: 0%"></div>
         </div>
       </div>
 
-      <div class="mt-4 pt-3 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
+      <div class="mt-4 pt-3 border-top-hairline flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div class="flex items-center gap-2">
-          <button id="checkUpdatesNowBtn" type="button"
-            class="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium transition">
-            Check Now
-          </button>
-          <a id="openReleasePageLink" href="https://github.com/efeartn/Resolv/releases" target="_blank" rel="noreferrer"
-            class="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition">
+          <button id="checkUpdatesNowBtn" type="button" class="btn-secondary">Check Now</button>
+          <a id="openReleasePageLink" href="https://github.com/efeartn/Resolv/releases" target="_blank" rel="noreferrer" class="btn-ghost-link">
             GitHub Releases
           </a>
         </div>
         <div class="flex items-center gap-2">
-          <button type="button" data-close-modal="updateModal"
-            class="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300">Close</button>
-          <button id="installUpdateBtn" type="button"
-            class="hidden px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold transition">
-            Download &amp; Restart
-          </button>
+          <button type="button" data-close-modal="updateModal" class="btn-secondary">Close</button>
+          <button id="installUpdateBtn" type="button" class="hidden btn-primary btn-sm">Download &amp; Restart</button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- MODAL 6: Saved Benchmark History -->
-  <div id="historyModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="w-full max-w-2xl rounded-2xl bg-[#121215] border border-zinc-800 shadow-2xl p-5 text-xs flex flex-col max-h-[85vh]">
-      <div class="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
+  <div id="historyModal" class="hidden modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-dialog w-full max-w-2xl p-5 text-xs flex flex-col max-h-[85vh]">
+      <div class="modal-header flex items-center justify-between pb-3 shrink-0">
         <div class="flex items-center gap-2">
-          <h3 class="text-sm font-semibold text-zinc-100">Benchmark History</h3>
-          <span id="historyCountBadge" class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">0 runs</span>
+          <h3 class="text-sm font-semibold text-primary">Benchmark History</h3>
+          <span id="historyCountBadge" class="badge-mode font-mono">0 runs</span>
         </div>
         <div class="flex items-center gap-2">
-          <button id="clearHistoryBtn" type="button"
-            class="px-2.5 py-1 rounded-md bg-zinc-900 hover:bg-rose-950/60 border border-zinc-800 hover:border-rose-800/70 text-[11px] text-zinc-400 hover:text-rose-200 transition">
-            Clear History
-          </button>
-          <button type="button" data-close-modal="historyModal" class="text-zinc-400 hover:text-zinc-200 pl-1">✕</button>
+          <button id="clearHistoryBtn" type="button" class="btn-danger-sm">Clear History</button>
+          <button type="button" data-close-modal="historyModal" class="modal-close" aria-label="Close">✕</button>
         </div>
       </div>
 
-      <p class="mt-2.5 text-[11px] text-zinc-400 shrink-0">
-        Stored locally in your OS config folder so results persist across app upgrades. Compare performance across Wi-Fi networks, VPNs, or ISPs.
+      <p class="mt-2.5 text-[11px] text-secondary shrink-0">
+        Stored in your OS config folder so snapshots persist across portable upgrades. Compare DNS speed across Wi-Fi networks, VPNs, or ISPs.
       </p>
 
       <div id="historyListContainer" class="mt-3 flex-1 overflow-y-auto space-y-2.5 pr-1"></div>
 
-      <div class="mt-4 pt-3 border-t border-zinc-800 flex justify-end shrink-0">
-        <button type="button" data-close-modal="historyModal"
-          class="px-4 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-medium">Close</button>
+      <div class="mt-4 pt-3 border-top-hairline flex justify-end shrink-0">
+        <button type="button" data-close-modal="historyModal" class="btn-secondary">Close</button>
       </div>
     </div>
   </div>
 
   <!-- MODAL 7: Preferences & Persistent Benchmark Defaults -->
-  <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="w-full max-w-lg rounded-2xl bg-[#121215] border border-zinc-800 shadow-2xl p-5 text-xs">
-      <div class="flex items-center justify-between pb-3 border-b border-zinc-800">
+  <div id="settingsModal" class="hidden modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-dialog w-full max-w-lg p-5 text-xs">
+      <div class="modal-header flex items-center justify-between pb-3">
         <div>
-          <h3 class="text-sm font-semibold text-zinc-100">Settings &amp; Persistence</h3>
-          <p class="text-[11px] text-zinc-400">Saved outside the app binary so updates never reset your configuration</p>
+          <h3 class="text-sm font-semibold text-primary">Settings &amp; Persistence</h3>
+          <p class="text-[11px] text-secondary">Stored outside the portable executable so updates never reset your defaults</p>
         </div>
-        <button type="button" data-close-modal="settingsModal" class="text-zinc-400 hover:text-zinc-200">✕</button>
+        <button type="button" data-close-modal="settingsModal" class="modal-close" aria-label="Close">✕</button>
       </div>
 
       <div class="mt-4 space-y-4">
-        <label class="flex items-center justify-between gap-3 rounded-lg bg-zinc-900/70 border border-zinc-800 px-3.5 py-2.5 cursor-pointer">
+        <label class="subtile flex items-center justify-between gap-3 px-3.5 py-2.5 cursor-pointer">
           <div>
-            <div class="font-medium text-zinc-200">Check for updates on startup</div>
-            <div class="text-[11px] text-zinc-400">Quietly highlights the Updates pill when a new version is published</div>
+            <div class="font-medium text-primary">Check for updates on startup</div>
+            <div class="text-[11px] text-secondary">Quietly highlights the Updates button when a new version is released</div>
           </div>
-          <input id="setAutoCheckUpdates" type="checkbox" checked class="accent-emerald-500 w-4 h-4 shrink-0" />
+          <input id="setAutoCheckUpdates" type="checkbox" checked class="checkbox-accent w-4 h-4 shrink-0" />
         </label>
 
         <div>
-          <label class="block text-zinc-400 mb-1.5">Default Protocols Tested</label>
+          <label class="block text-secondary mb-1.5">Default Protocols Tested</label>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <label class="flex items-center gap-2 rounded-lg bg-zinc-900 border border-zinc-800 px-2.5 py-2 cursor-pointer">
-              <input type="checkbox" data-set-proto="udp" class="accent-emerald-500" />
-              <span class="font-mono text-zinc-200">UDP :53</span>
+            <label class="subtile flex items-center gap-2 px-2.5 py-2 cursor-pointer">
+              <input type="checkbox" data-set-proto="udp" class="checkbox-accent" />
+              <span class="font-mono text-primary">UDP :53</span>
             </label>
-            <label class="flex items-center gap-2 rounded-lg bg-zinc-900 border border-zinc-800 px-2.5 py-2 cursor-pointer">
-              <input type="checkbox" data-set-proto="doh" class="accent-emerald-500" />
-              <span class="font-mono text-zinc-200">DoH</span>
+            <label class="subtile flex items-center gap-2 px-2.5 py-2 cursor-pointer">
+              <input type="checkbox" data-set-proto="doh" class="checkbox-accent" />
+              <span class="font-mono text-primary">DoH</span>
             </label>
-            <label class="flex items-center gap-2 rounded-lg bg-zinc-900 border border-zinc-800 px-2.5 py-2 cursor-pointer">
-              <input type="checkbox" data-set-proto="dot" class="accent-emerald-500" />
-              <span class="font-mono text-zinc-200">DoT :853</span>
+            <label class="subtile flex items-center gap-2 px-2.5 py-2 cursor-pointer">
+              <input type="checkbox" data-set-proto="dot" class="checkbox-accent" />
+              <span class="font-mono text-primary">DoT :853</span>
             </label>
-            <label class="flex items-center gap-2 rounded-lg bg-zinc-900 border border-zinc-800 px-2.5 py-2 cursor-pointer">
-              <input type="checkbox" data-set-proto="tcp" class="accent-emerald-500" />
-              <span class="font-mono text-zinc-200">TCP :53</span>
+            <label class="subtile flex items-center gap-2 px-2.5 py-2 cursor-pointer">
+              <input type="checkbox" data-set-proto="tcp" class="checkbox-accent" />
+              <span class="font-mono text-primary">TCP :53</span>
             </label>
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label for="setDefaultQueries" class="block text-zinc-400 mb-1">Queries per Protocol</label>
-            <select id="setDefaultQueries" class="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-zinc-100 focus:outline-none focus:border-emerald-500">
-              <option value="5">5 (Fast)</option>
-              <option value="10">10 (Balanced)</option>
-              <option value="20">20 (Thorough)</option>
+            <label for="setDefaultQueries" class="block text-secondary mb-1">Queries per Protocol</label>
+            <select id="setDefaultQueries" class="input-field w-full">
+              <option value="5">5 (Quick)</option>
+              <option value="10">10 (Standard)</option>
+              <option value="20">20 (Deep)</option>
             </select>
           </div>
           <div>
-            <label for="setDefaultTimeout" class="block text-zinc-400 mb-1">Query Timeout (ms)</label>
-            <select id="setDefaultTimeout" class="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-zinc-100 focus:outline-none focus:border-emerald-500">
+            <label for="setDefaultTimeout" class="block text-secondary mb-1">Query Timeout (ms)</label>
+            <select id="setDefaultTimeout" class="input-field w-full">
               <option value="1200">1200 ms</option>
               <option value="2000">2000 ms</option>
               <option value="3500">3500 ms</option>
@@ -729,31 +690,28 @@
         </div>
 
         <div>
-          <label for="setUncachedBase" class="block text-zinc-400 mb-1">Uncached Test Base Domain</label>
-          <input id="setUncachedBase" type="text" placeholder="resbench.invalid"
-            class="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 font-mono text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500" />
-          <p class="mt-1 text-[11px] text-zinc-500">Queries random UUID subdomains under this zone to measure uncached upstream resolution.</p>
+          <label for="setUncachedBase" class="block text-secondary mb-1">Uncached Test Base Domain</label>
+          <input id="setUncachedBase" type="text" placeholder="resbench.invalid" class="input-field w-full font-mono" />
+          <p class="mt-1 text-[11px] text-muted">Queries random UUID subdomains under this zone to measure uncached upstream resolution.</p>
         </div>
 
-        <label class="flex items-center justify-between gap-3 rounded-lg bg-zinc-900/70 border border-zinc-800 px-3.5 py-2.5 cursor-pointer">
+        <label class="subtile flex items-center justify-between gap-3 px-3.5 py-2.5 cursor-pointer">
           <div>
-            <div class="font-medium text-zinc-200">Run DNSSEC, AdBlock &amp; Hijack probes</div>
-            <div class="text-[11px] text-zinc-400">Recommended for detecting ISP DNS interception and validation status</div>
+            <div class="font-medium text-primary">Run DNSSEC, AdBlock &amp; Hijack probes</div>
+            <div class="text-[11px] text-secondary">Detects transparent port 53 interception and signature validation</div>
           </div>
-          <input id="setCheckIntegrity" type="checkbox" checked class="accent-emerald-500 w-4 h-4 shrink-0" />
+          <input id="setCheckIntegrity" type="checkbox" checked class="checkbox-accent w-4 h-4 shrink-0" />
         </label>
 
-        <div class="rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 font-mono text-[11px] text-zinc-400">
-          <div class="text-[10px] uppercase tracking-wider text-zinc-500">Config &amp; History Storage Path</div>
-          <div id="settingsConfigDir" class="mt-0.5 text-zinc-300 truncate select-text">—</div>
+        <div class="code-box font-mono text-[11px] text-secondary">
+          <div class="text-micro uppercase">Config &amp; History Storage Path</div>
+          <div id="settingsConfigDir" class="mt-0.5 text-primary truncate select-text">—</div>
         </div>
       </div>
 
       <div class="mt-5 flex justify-end gap-2">
-        <button type="button" data-close-modal="settingsModal"
-          class="px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300">Cancel</button>
-        <button id="saveSettingsBtn" type="button"
-          class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold">Save Settings</button>
+        <button type="button" data-close-modal="settingsModal" class="btn-secondary">Cancel</button>
+        <button id="saveSettingsBtn" type="button" class="btn-primary btn-sm">Save Settings</button>
       </div>
     </div>
   </div>

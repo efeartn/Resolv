@@ -34,6 +34,7 @@ func detect(ctx context.Context) (*Info, error) {
 		info.Warnings = append(info.Warnings, "Neither NetworkManager (nmcli) nor systemd-resolved (resolvectl) was found; DNS switching is unavailable — use “Copy DNS Addresses”.")
 	}
 
+	ip4Map := ipAddrByDev(ctx)
 	if useNM {
 		out, err := run(ctx, "nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status")
 		if err == nil {
@@ -52,7 +53,7 @@ func detect(ctx context.Context) (*Info, error) {
 				}
 				iface := Adapter{
 					ID: dev, Name: conn, Device: dev, Connection: conn,
-					Kind: nmKind(typ),
+					Kind: nmKind(typ), IPv4: ip4Map[dev],
 				}
 				iface.DNS = nmDeviceDNS(ctx, dev)
 				iface.DNSManual = nmConnManual(ctx, conn)
@@ -65,7 +66,7 @@ func detect(ctx context.Context) (*Info, error) {
 	}
 
 	if len(info.Interfaces) == 0 && defDev != "" {
-		iface := Adapter{ID: defDev, Name: defDev, Device: defDev, Gateway: gateway}
+		iface := Adapter{ID: defDev, Name: defDev, Device: defDev, Gateway: gateway, IPv4: ip4Map[defDev]}
 		if _, err := os.Stat("/sys/class/net/" + defDev + "/wireless"); err == nil {
 			iface.Kind = "wifi"
 		}
@@ -118,6 +119,32 @@ func osRelease() string {
 		}
 	}
 	return "Linux"
+}
+
+// ipAddrByDev gathers interface IPv4 addresses across NetworkManager and non-NM distros.
+func ipAddrByDev(ctx context.Context) map[string][]string {
+	res := map[string][]string{}
+	out, err := run(ctx, "ip", "-4", "-o", "addr", "show", "up")
+	if err != nil {
+		return res
+	}
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 4 {
+			continue
+		}
+		dev := f[1]
+		for i := 0; i+1 < len(f); i++ {
+			if f[i] == "inet" {
+				ipStr, _, _ := strings.Cut(f[i+1], "/")
+				if ip := net.ParseIP(ipStr); ip != nil && !ip.IsLoopback() {
+					res[dev] = append(res[dev], ip.String())
+				}
+				break
+			}
+		}
+	}
+	return res
 }
 
 // defaultRoute reads /proc/net/route (no external tools needed), falling

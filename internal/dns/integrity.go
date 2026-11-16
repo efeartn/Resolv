@@ -74,24 +74,28 @@ var adCanaryDomains = []string{
 }
 
 type integrityProbe struct {
-	udp querier
-	doh querier
+	udp      querier
+	doh      querier
+	ownedUDP bool
+	ownedDoH bool
 }
 
 func (p integrityProbe) close() {
-	if p.udp != nil {
+	if p.ownedUDP && p.udp != nil {
 		p.udp.close()
 	}
-	if p.doh != nil {
+	if p.ownedDoH && p.doh != nil {
 		p.doh.close()
 	}
 }
 
-func checkIntegrity(ctx context.Context, servers []*serverState, results []*ServerResult, opts Options, progress ProgressFunc) NetworkIntegrity {
+func checkIntegrity(ctx context.Context, servers []*serverState, results []*ServerResult, opts Options, client *http.Client, progress ProgressFunc) NetworkIntegrity {
 	timeout := opts.timeout()
-	transport := newDoHTransport(timeout)
-	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: timeout}
+	if client == nil {
+		transport := newDoHTransport(timeout)
+		defer transport.CloseIdleConnections()
+		client = &http.Client{Transport: transport, Timeout: timeout}
+	}
 
 	total := len(servers) + 1
 	var done int64
@@ -128,12 +132,21 @@ func checkIntegrity(ctx context.Context, servers []*serverState, results []*Serv
 				step("Skipped " + r.Name)
 				return
 			}
-			p := integrityProbe{}
-			if q, err := newQuerier(r, ProtoUDP, timeout, client); err == nil {
-				p.udp = q
+			p := integrityProbe{
+				udp: servers[i].queriers[ProtoUDP],
+				doh: servers[i].queriers[ProtoDoH],
 			}
-			if q, err := newQuerier(r, ProtoDoH, timeout, client); err == nil {
-				p.doh = q
+			if p.udp == nil {
+				if q, err := newQuerier(r, ProtoUDP, timeout, client); err == nil {
+					p.udp = q
+					p.ownedUDP = true
+				}
+			}
+			if p.doh == nil {
+				if q, err := newQuerier(r, ProtoDoH, timeout, client); err == nil {
+					p.doh = q
+					p.ownedDoH = true
+				}
 			}
 			defer p.close()
 

@@ -161,7 +161,7 @@ func TestNormalizeAndSkippedAndLiveProgress(t *testing.T) {
 
 	// UDP-only run on a DoH-only resolver should mark status="skipped", not "failed".
 	dohOnly := Resolver{ID: "dohonly", Name: "DoH Only", Category: CategoryPrivacy, Source: SourceBuiltin, DoH: "https://example.com/dns-query"}
-	rep := Run(context.Background(), []Resolver{dohOnly}, Options{Protocols: []string{"udp"}, Queries: 1, CheckIntegrity: false}, "1.1.1", nil)
+	rep := Run(context.Background(), []Resolver{dohOnly}, Options{Protocols: []string{"udp"}, Queries: 1, CheckIntegrity: false}, "1.2.0", nil)
 	if len(rep.Results) != 1 || rep.Results[0].Status != "skipped" {
 		t.Fatalf("expected skipped status for DoH-only resolver in UDP mode, got %+v", rep.Results)
 	}
@@ -214,7 +214,7 @@ func TestNormalizeAndSkippedAndLiveProgress(t *testing.T) {
 		StaggerMs:      0,
 		TimeoutMs:      1000,
 		CheckIntegrity: false,
-	}, "1.1.1", func(p Progress) {
+	}, "1.2.0", func(p Progress) {
 		if len(p.Partial) > 0 {
 			partialCount++
 		}
@@ -336,5 +336,47 @@ func TestStreamQuerierFallbackAddr(t *testing.T) {
 	if fallbackTester.addr != pc.Addr().String() || fallbackTester.fallbackAddr != "" {
 		t.Fatalf("expected working fallback address to be promoted, got addr=%q fallback=%q",
 			fallbackTester.addr, fallbackTester.fallbackAddr)
+	}
+}
+
+func TestUDPQuerierReusesClientAndCheckIntegrityReusesWarmQuerier(t *testing.T) {
+	r := Resolver{ID: "udp-reuse", IPv4: []string{"127.0.0.1"}}
+	q, err := newQuerier(r, ProtoUDP, time.Second, nil)
+	if err != nil {
+		t.Fatalf("newQuerier ProtoUDP: %v", err)
+	}
+	uq, ok := q.(*udpQuerier)
+	if !ok || uq.client == nil {
+		t.Fatalf("expected *udpQuerier with initialized client, got %T", q)
+	}
+
+	dohSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		req := new(mdns.Msg)
+		if err := req.Unpack(body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		resp := new(mdns.Msg)
+		resp.SetReply(req)
+		out, _ := resp.Pack()
+		w.Header().Set("Content-Type", "application/dns-message")
+		_, _ = w.Write(out)
+	}))
+	defer dohSrv.Close()
+
+	mockDoH := Resolver{ID: "mockdoh-reuse", Name: "Mock DoH", Category: CategoryCustom, Source: SourceCustom, DoH: dohSrv.URL}
+	dq, err := newQuerier(mockDoH, ProtoDoH, time.Second, dohSrv.Client())
+	if err != nil {
+		t.Fatalf("newQuerier ProtoDoH: %v", err)
+	}
+	msg := newQuery("example.com", mdns.TypeA, false)
+	origID := msg.Id
+	resp, _, err := dq.exchange(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("doh exchange: %v", err)
+	}
+	if msg.Id != origID || resp.Id != origID {
+		t.Fatalf("expected original query ID preserved (%d), msg=%d resp=%d", origID, msg.Id, resp.Id)
 	}
 }
