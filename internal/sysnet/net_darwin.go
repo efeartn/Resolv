@@ -25,13 +25,62 @@ const (
 
 var (
 	reServiceLine = regexp.MustCompile(`^\((\d+|\*)\)\s+(.+)$`)
-	reHardware    = regexp.MustCompile(`^\(Hardware Port:\s*(.*?),\s*Device:\s*(.*?)\)$`)
+	reHardware    = regexp.MustCompile(`^\([^:]+:\s*(.*?),\s*[^:]+:\s*([A-Za-z0-9_.-]+)\)$`)
 	reNameserver  = regexp.MustCompile(`^\s*nameserver\[\d+\]\s*:\s*(\S+)`)
 )
 
 type macService struct {
 	name, port, device string
 	enabled            bool
+}
+
+func defaultRouteDarwin(ctx context.Context) (defDev, gateway string) {
+	parseRoute := func(out string) (dev, gw string) {
+		for _, line := range strings.Split(out, "\n") {
+			k, v, ok := strings.Cut(strings.TrimSpace(line), ":")
+			if !ok {
+				continue
+			}
+			switch strings.TrimSpace(k) {
+			case "interface":
+				dev = strings.TrimSpace(v)
+			case "gateway":
+				gw = strings.TrimSpace(v)
+			}
+		}
+		return dev, gw
+	}
+	if out, err := run(ctx, routeBin, "-n", "get", "default"); err == nil {
+		defDev, gateway = parseRoute(out)
+	}
+	if defDev == "" {
+		if out, err := run(ctx, routeBin, "-n", "get", "-inet6", "default"); err == nil {
+			defDev, gateway = parseRoute(out)
+		}
+	}
+	return defDev, gateway
+}
+
+func parseMacServiceOrder(out string) []macService {
+	var services []macService
+	var cur *macService
+	sc := bufio.NewScanner(strings.NewReader(out))
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if m := reServiceLine.FindStringSubmatch(line); m != nil {
+			services = append(services, macService{name: m[2], enabled: m[1] != "*"})
+			cur = &services[len(services)-1]
+			continue
+		}
+		if m := reHardware.FindStringSubmatch(line); m != nil && cur != nil {
+			cur.port, cur.device = strings.TrimSpace(m[1]), strings.TrimSpace(m[2])
+		}
+	}
+	return services
+}
+
+func parseMacDNSServers(out string) []string {
+	return cleanIPs(strings.Fields(out))
 }
 
 func detect(ctx context.Context) (*Info, error) {
@@ -41,22 +90,7 @@ func detect(ctx context.Context) (*Info, error) {
 	ver, _ := run(ctx, swVers, "-productVersion")
 	info.OSName = strings.TrimSpace(strings.TrimSpace(name) + " " + strings.TrimSpace(ver))
 
-	// Default route → active device + gateway.
-	defDev, gateway := "", ""
-	if out, err := run(ctx, routeBin, "-n", "get", "default"); err == nil {
-		for _, line := range strings.Split(out, "\n") {
-			k, v, ok := strings.Cut(strings.TrimSpace(line), ":")
-			if !ok {
-				continue
-			}
-			switch strings.TrimSpace(k) {
-			case "interface":
-				defDev = strings.TrimSpace(v)
-			case "gateway":
-				gateway = strings.TrimSpace(v)
-			}
-		}
-	}
+	defDev, gateway := defaultRouteDarwin(ctx)
 
 	// Enabled services (networksetup -listallnetworkservices marks disabled with '*').
 	enabled := map[string]bool{}
@@ -75,24 +109,11 @@ func detect(ctx context.Context) (*Info, error) {
 	}
 
 	// Service → hardware port/device mapping.
-	var services []macService
 	out, err := run(ctx, networksetup, "-listnetworkserviceorder")
 	if err != nil {
 		return info, fmt.Errorf("networksetup failed: %w", err)
 	}
-	var cur *macService
-	sc := bufio.NewScanner(strings.NewReader(out))
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if m := reServiceLine.FindStringSubmatch(line); m != nil {
-			services = append(services, macService{name: m[2], enabled: m[1] != "*"})
-			cur = &services[len(services)-1]
-			continue
-		}
-		if m := reHardware.FindStringSubmatch(line); m != nil && cur != nil {
-			cur.port, cur.device = m[1], m[2]
-		}
-	}
+	services := parseMacServiceOrder(out)
 
 	for _, s := range services {
 		if !s.enabled || (len(enabled) > 0 && !enabled[s.name]) || s.device == "" {
@@ -116,9 +137,11 @@ func detect(ctx context.Context) (*Info, error) {
 		if s.device == defDev {
 			iface.Gateway = gateway
 		}
-		if dnsOut, err := run(ctx, networksetup, "-getdnsservers", s.name); err == nil && !strings.Contains(dnsOut, "aren't any") {
-			iface.DNSManual = true
-			iface.DNS = strings.Fields(dnsOut)
+		if dnsOut, err := run(ctx, networksetup, "-getdnsservers", s.name); err == nil {
+			if ips := parseMacDNSServers(dnsOut); len(ips) > 0 {
+				iface.DNSManual = true
+				iface.DNS = ips
+			}
 		}
 		info.Interfaces = append(info.Interfaces, iface)
 	}

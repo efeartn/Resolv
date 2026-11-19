@@ -3,6 +3,26 @@
 All notable changes to **Resolv** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.3.0] - 2026-11-19
+
+### Added
+- **DoH Speed Spotlight:** Prominent `DoH` latency badges in Simple View rows, dedicated highlighted `DoH` column in the Pro Telemetry table, accented DoH tile in the Expanded Details Drawer, and a persistent `"Sort: Fastest DoH"` (`sortBy = "doh"`) mode.
+- **Inline Speedup Delta Badges:** Real-time percentage delta pills (`-X%` / `+X%`) on every resolver row comparing average latency against the active system DNS baseline.
+- **Clickable Pro Telemetry Sorting:** Clickable column headers (`#`, `Avg`, `P95`, `Cached`, `Uncached`, `Jitter`, `DoH`) with active sort indicators.
+- **Search Counter & Clear Control:** Live `Showing X / Y` count badge in the filter toolbar, debounced filtering, and an inline clear (`✕`) button inside the search field.
+- **Dynamic Markdown Protocol Columns:** Markdown exports now automatically include `DoT` and `TCP` latency columns when any tested resolver reports them.
+- **macOS & Linux Unit Coverage:** Added build-tagged unit tests for localized macOS `networksetup` parsing (`net_darwin_test.go`), Gatekeeper translocation detection (`swap_unix_test.go`), and Linux `ip route` / `ip addr` / `nmcli` / `resolvectl` parsing (`net_linux_test.go`).
+
+### Changed
+- **Platform-Aware Shortcuts & Mutation Guards:** Footer hints and keyboard shortcuts adapt to `⌥1` / `⌥2` (`Option+1` / `Option+2`) on macOS, while Apply/Reset/Flush controls lock safely during active DNS write operations.
+- **Faster Cold Startup Rendering:** Coalesced initial bootstrap state so the DOM renders once on launch instead of twice.
+- **Documentation & Version Alignment:** Updated version identifiers to `v1.3.0` across runtime bindings, WebView title/UI, tests, and documentation.
+
+### Fixed
+- **macOS Localized OS Parsing & Self-Updater:** Replaced English-only `networksetup` string assumptions with IP/port heuristics for `-getdnsservers` and `-listnetworkserviceorder`, added IPv6-fallback default-route detection, and hardened `.app` bundle updates against Gatekeeper App Translocation with same-filesystem staging, quarantine stripping, and detached relaunch.
+- **Linux Networking & Wayland NVIDIA Stability:** Added active `systemd-resolved` detection before querying/flushing, IPv6 default-route fallback, `ip -4 -o addr` parsing, stale IPv6 DNS clearing on IPv4-only `nmcli` changes, `resolvectl` manual CLI fallbacks, detached PID-wait binary relaunches, and automatic `WEBKIT_DISABLE_DMABUF_RENDERER=1` initialization on Wayland + NVIDIA systems (`platform_linux.go`).
+- **Adapter Selection Snapback:** Preserved the user's selected network adapter across post-DNS-change refreshes (`refreshAfterChange`).
+
 ## [v1.2.0] - 2026-11-16
 
 ### Changed & Redesigned

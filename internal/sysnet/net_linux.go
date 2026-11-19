@@ -18,20 +18,29 @@ import (
 
 const flushScript = "(resolvectl flush-caches 2>/dev/null || systemd-resolve --flush-caches 2>/dev/null || true)"
 
+func systemdResolvedActive(ctx context.Context) bool {
+	if !have("resolvectl") {
+		return false
+	}
+	_, err := run(ctx, "resolvectl", "status")
+	return err == nil
+}
+
 func detect(ctx context.Context) (*Info, error) {
 	info := &Info{OSName: osRelease()}
 	defDev, gateway := defaultRoute(ctx)
 	info.Gateway = gateway
 
 	useNM := have("nmcli") && nmRunning(ctx)
+	resolvedActive := systemdResolvedActive(ctx)
 	switch {
 	case useNM:
 		info.Backend = "nmcli"
-	case have("resolvectl"):
+	case resolvedActive:
 		info.Backend = "resolvectl"
 	default:
 		info.Backend = "none"
-		info.Warnings = append(info.Warnings, "Neither NetworkManager (nmcli) nor systemd-resolved (resolvectl) was found; DNS switching is unavailable — use “Copy DNS Addresses”.")
+		info.Warnings = append(info.Warnings, "Neither NetworkManager (nmcli) nor an active systemd-resolved daemon (resolvectl) was found; DNS switching is unavailable — use “Copy DNS Addresses”.")
 	}
 
 	ip4Map := ipAddrByDev(ctx)
@@ -70,7 +79,9 @@ func detect(ctx context.Context) (*Info, error) {
 		if _, err := os.Stat("/sys/class/net/" + defDev + "/wireless"); err == nil {
 			iface.Kind = "wifi"
 		}
-		iface.DNS = resolvectlLinkDNS(ctx, defDev)
+		if resolvedActive {
+			iface.DNS = resolvectlLinkDNS(ctx, defDev)
+		}
 		info.Interfaces = append(info.Interfaces, iface)
 	}
 
@@ -90,10 +101,10 @@ func detect(ctx context.Context) (*Info, error) {
 	if info.Active != nil {
 		info.SystemDNS = nonLoopback(info.Active.DNS)
 	}
-	if len(info.SystemDNS) == 0 && info.Active != nil {
+	if len(info.SystemDNS) == 0 && info.Active != nil && resolvedActive {
 		info.SystemDNS = nonLoopback(resolvectlLinkDNS(ctx, info.Active.Device))
 	}
-	if len(info.SystemDNS) == 0 {
+	if len(info.SystemDNS) == 0 && resolvedActive {
 		info.SystemDNS = nonLoopback(resolvectlGlobalDNS(ctx))
 	}
 	if len(info.SystemDNS) == 0 {
@@ -123,11 +134,15 @@ func osRelease() string {
 
 // ipAddrByDev gathers interface IPv4 addresses across NetworkManager and non-NM distros.
 func ipAddrByDev(ctx context.Context) map[string][]string {
-	res := map[string][]string{}
 	out, err := run(ctx, "ip", "-4", "-o", "addr", "show", "up")
 	if err != nil {
-		return res
+		return map[string][]string{}
 	}
+	return parseIPv4AddrOutput(out)
+}
+
+func parseIPv4AddrOutput(out string) map[string][]string {
+	res := map[string][]string{}
 	for _, line := range strings.Split(out, "\n") {
 		f := strings.Fields(line)
 		if len(f) < 4 {
@@ -147,8 +162,30 @@ func ipAddrByDev(ctx context.Context) map[string][]string {
 	return res
 }
 
+func parseIPRouteDefault(out string) (dev, gw string) {
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		for i := 0; i+1 < len(f); i++ {
+			switch f[i] {
+			case "via":
+				if gw == "" {
+					gw = f[i+1]
+				}
+			case "dev":
+				if dev == "" {
+					dev = f[i+1]
+				}
+			}
+		}
+		if dev != "" {
+			return dev, gw
+		}
+	}
+	return dev, gw
+}
+
 // defaultRoute reads /proc/net/route (no external tools needed), falling
-// back to `ip route`.
+// back to `ip -4 route` and `ip -6 route` for IPv6-only networks.
 func defaultRoute(ctx context.Context) (dev, gw string) {
 	if f, err := os.Open("/proc/net/route"); err == nil {
 		defer f.Close()
@@ -175,22 +212,13 @@ func defaultRoute(ctx context.Context) (dev, gw string) {
 			return dev, gw
 		}
 	}
-	out, err := run(ctx, "ip", "-4", "route", "show", "default")
-	if err != nil {
-		return "", ""
-	}
-	f := strings.Fields(out)
-	for i := 0; i+1 < len(f); i++ {
-		switch f[i] {
-		case "via":
-			if gw == "" {
-				gw = f[i+1]
-			}
-		case "dev":
-			if dev == "" {
-				dev = f[i+1]
-			}
+	if out, err := run(ctx, "ip", "-4", "route", "show", "default"); err == nil {
+		if dev, gw = parseIPRouteDefault(out); dev != "" {
+			return dev, gw
 		}
+	}
+	if out, err := run(ctx, "ip", "-6", "route", "show", "default"); err == nil {
+		dev, gw = parseIPRouteDefault(out)
 	}
 	return dev, gw
 }
@@ -341,6 +369,8 @@ func applyDNS(ctx context.Context, iface *Adapter, servers []string) error {
 		}
 		if len(v6) > 0 {
 			args = append(args, "ipv6.dns", shellQuote(strings.Join(v6, " ")), "ipv6.ignore-auto-dns", "yes")
+		} else if len(v4) > 0 {
+			args = append(args, "ipv6.dns", "''", "ipv6.ignore-auto-dns", "no")
 		}
 		script := fmt.Sprintf("%s && (nmcli device reapply %s || nmcli connection up id %s) && %s",
 			strings.Join(args, " "), shellQuote(iface.Device), shellQuote(iface.Connection), flushScript)
@@ -367,7 +397,7 @@ func resetDNS(ctx context.Context, iface *Adapter) error {
 }
 
 func flushCache(ctx context.Context) error {
-	if !have("resolvectl") && !have("systemd-resolve") {
+	if !systemdResolvedActive(ctx) && !have("systemd-resolve") {
 		return nil // no local caching resolver to flush
 	}
 	return runPrivileged(ctx, "resolvectl flush-caches 2>/dev/null || systemd-resolve --flush-caches")
@@ -375,11 +405,26 @@ func flushCache(ctx context.Context) error {
 
 func manualGuide(iface *Adapter, servers []string) ManualGuide {
 	conn, dev := "<connection>", "<device>"
+	hasConn := false
 	if iface != nil {
 		if iface.Connection != "" {
 			conn = iface.Connection
+			hasConn = true
 		}
-		dev = iface.Device
+		if iface.Device != "" {
+			dev = iface.Device
+		}
+	}
+	if !hasConn && (!have("nmcli") || have("resolvectl")) {
+		cmd := fmt.Sprintf("sudo resolvectl dns %s %s && sudo resolvectl domain %s '~.' && sudo resolvectl flush-caches",
+			shellQuote(dev), strings.Join(servers, " "), shellQuote(dev))
+		return ManualGuide{
+			Steps: []string{
+				"Apply DNS directly for device “" + dev + "” via systemd-resolved (resolvectl), or update your desktop network settings.",
+				"Run the terminal command below with administrator privileges.",
+			},
+			Command: cmd,
+		}
 	}
 	v4, v6 := splitFamilies(servers)
 	cmd := fmt.Sprintf("nmcli connection modify id %s ipv4.dns %s ipv4.ignore-auto-dns yes", shellQuote(conn), shellQuote(strings.Join(v4, " ")))

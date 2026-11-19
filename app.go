@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	AppVersion = "1.2.0"
+	AppVersion = "1.3.0"
 	AppRepo    = "efeartn/Resolv"
 	AppRepoURL = "https://github.com/efeartn/Resolv"
 	AppLicense = "GNU General Public License v3.0 or later (GPL-3.0-or-later)"
@@ -441,9 +441,32 @@ func (a *App) SaveReport(format string) (string, error) {
 }
 
 func (a *App) refreshAfterChange() *sysnet.Info {
+	a.mu.Lock()
+	prevID := ""
+	if a.netInfo != nil && a.netInfo.Active != nil {
+		prevID = a.netInfo.Active.ID
+	}
+	prevInfo := a.netInfo
+	a.mu.Unlock()
+
 	info, err := sysnet.Detect(a.baseCtx())
 	if err != nil || info == nil {
-		return a.netInfo
+		return prevInfo
+	}
+	if prevID != "" {
+		for i := range info.Interfaces {
+			if info.Interfaces[i].ID == prevID {
+				chosen := info.Interfaces[i]
+				info.Active = &chosen
+				if len(chosen.DNS) > 0 {
+					info.SystemDNS = append([]string(nil), chosen.DNS...)
+				}
+				if chosen.Gateway != "" {
+					info.Gateway = chosen.Gateway
+				}
+				break
+			}
+		}
 	}
 	a.mu.Lock()
 	a.netInfo = info

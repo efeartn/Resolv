@@ -18,7 +18,7 @@
         <img src="icon.svg" alt="Resolv" class="w-8 h-8 rounded-lg border-hairline" />
         <div class="flex items-center gap-1.5 sm:gap-2">
           <span class="font-semibold tracking-tight text-primary text-[15px]">Resolv</span>
-          <span id="appVersionBadge" class="tag-version font-mono">v1.2.0</span>
+          <span id="appVersionBadge" class="tag-version font-mono">v1.3.0</span>
           <span id="elevatedBadge" class="hidden tag-admin font-mono" title="Running with Administrator / Root privileges">Admin</span>
           <span id="offlineBadge" class="hidden tag-offline font-mono" title="No active network route detected">Offline</span>
         </div>
@@ -317,12 +317,15 @@
       </div>
 
       <div class="flex flex-wrap items-center gap-2.5 text-[11px] font-mono text-secondary">
+        <span id="filterCountBadge" class="hidden badge-mode font-mono"></span>
         <div class="relative">
           <input id="searchResolverInput" type="text" placeholder="Filter name or IP… (/)" class="search-input" />
+          <button id="clearSearchBtn" type="button" class="hidden search-clear-btn" aria-label="Clear search" title="Clear search (Esc)">✕</button>
         </div>
         <select id="sortSelect" aria-label="Sort Resolvers" class="input-select text-xs">
           <option value="rank">Sort: Overall Rank</option>
           <option value="avg">Sort: Fastest Avg</option>
+          <option value="doh">Sort: Fastest DoH</option>
           <option value="p95">Sort: Lowest P95</option>
           <option value="cached">Sort: Fastest Cached</option>
           <option value="uncached">Sort: Fastest Uncached</option>
@@ -379,8 +382,8 @@
         <span>Pure-Go DNS Engine (UDP · TCP · DoH · DoT)</span>
         <span class="hidden md:inline-flex items-center gap-1.5">
           <kbd class="kbd-cap">/</kbd> Search
-          <kbd class="kbd-cap">Alt+1</kbd> Simple
-          <kbd class="kbd-cap">Alt+2</kbd> Pro
+          <kbd id="kbdSimpleKey" class="kbd-cap">Alt+1</kbd> Simple
+          <kbd id="kbdProKey" class="kbd-cap">Alt+2</kbd> Pro
           <kbd class="kbd-cap">Esc</kbd> Close
         </span>
       </div>
@@ -496,7 +499,7 @@
           <img src="icon.svg" alt="Resolv" class="w-9 h-9 rounded-xl border-hairline" />
           <div>
             <h3 class="text-sm font-semibold text-primary">Resolv</h3>
-            <p id="aboutVersionArch" class="font-mono text-[11px] text-secondary">v1.2.0 · Cross-Platform Portable App</p>
+            <p id="aboutVersionArch" class="font-mono text-[11px] text-secondary">v1.3.0 · Cross-Platform Portable App</p>
           </div>
         </div>
         <button type="button" data-close-modal="aboutModal" class="modal-close" aria-label="Close">✕</button>
@@ -551,7 +554,7 @@
       <div class="mt-4 grid grid-cols-2 gap-2.5 shrink-0">
         <div class="subtile px-3 py-2">
           <div class="text-micro font-mono uppercase">Installed Version</div>
-          <div id="updateCurrentVer" class="mt-0.5 font-mono text-sm font-semibold text-primary">v1.2.0</div>
+          <div id="updateCurrentVer" class="mt-0.5 font-mono text-sm font-semibold text-primary">v1.3.0</div>
         </div>
         <div class="subtile px-3 py-2">
           <div class="text-micro font-mono uppercase">Latest on GitHub</div>

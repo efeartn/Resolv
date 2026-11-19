@@ -84,7 +84,7 @@ Standalone binaries are automatically compiled and published by GitHub Actions o
 
 </details>
 
-> **What's New in [`v1.2.0`](https://github.com/efeartn/Resolv/releases/tag/v1.2.0):** Redesigned **Precision Dark Instrument** UI with 100% offline static CSS (removing external Tailwind CDN script completely), lower RAM/CPU footprint (`64 MiB` Go heap limit, reused HTTP/2 & UDP queriers, active-tab-only live DOM rendering, clean `%LocalAppData%\Resolv\WebView2` portable cache path), **Quick / Standard / Deep** depth presets, and one-click **IPv4 / IPv6 / DoH / DoT** endpoint copy chips. See [CHANGELOG.md](./CHANGELOG.md).
+> **What's New in [`v1.3.0`](https://github.com/efeartn/Resolv/releases/tag/v1.3.0):** Spotlighted **DNS-over-HTTPS (DoH) speed** across Simple View, Pro Telemetry, Expanded Drawer, and `"Sort: Fastest DoH"`, added **inline speedup delta badges** (`-64%` / `+12%` vs. system DNS), **clickable Pro column sorting**, a **live `Showing X / Y` search counter with inline clear (`✕`)**, **macOS localization & Gatekeeper updater hardening**, **Linux `nmcli`/`systemd-resolved` + NVIDIA Wayland DMA-BUF stability fixes**, and single-render startup coalescing. See [CHANGELOG.md](./CHANGELOG.md).
 
 ---
 
@@ -175,6 +175,8 @@ Resolv/
 ├── go.mod / go.sum                 # Go module configuration
 ├── wails.json                      # Wails v2 project & packaging configuration
 ├── main.go                         # Native desktop window & embedded assets
+├── platform_linux.go               # Linux Wayland + NVIDIA DMA-BUF stability initializer
+├── platform_other.go               # No-op platform initializer for Windows/macOS
 ├── app.go                          # Wails controller: benchmark, net, settings, history & updates
 ├── .github/workflows/release.yml   # Automated multi-OS GitHub Actions release pipeline
 ├── build/
@@ -203,12 +205,16 @@ Resolv/
     │   ├── exec_windows.go         # Hidden subprocess creation flags on Windows
     │   ├── exec_unix.go            # POSIX locale normalization & /etc/resolv.conf reader
     │   ├── net_windows.go          # Windows PowerShell/CIM + UAC implementation
+    │   ├── net_windows_test.go     # Windows adapter/IP unit tests
     │   ├── net_darwin.go           # macOS networksetup/scutil + osascript implementation
-    │   └── net_linux.go            # Linux nmcli/resolvectl + pkexec implementation
+    │   ├── net_darwin_test.go      # macOS localized parsing & route unit tests
+    │   ├── net_linux.go            # Linux nmcli/resolvectl + pkexec implementation
+    │   └── net_linux_test.go       # Linux ip/nmcli/resolvectl unit tests
     └── updater/
         ├── updater.go              # GitHub Releases semver check & SHA-256 verification
         ├── swap_windows.go         # Windows detached PowerShell binary swapper
-        ├── swap_unix.go            # macOS .app ditto swapper & Linux EXDEV-safe swapper
+        ├── swap_unix.go            # macOS Gatekeeper-safe .app ditto swapper & Linux EXDEV-safe swapper
+        ├── swap_unix_test.go       # macOS translocation unit tests
         └── updater_test.go         # Release API, SHA-256 & swap helper tests
 ```
 

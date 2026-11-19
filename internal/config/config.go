@@ -79,7 +79,7 @@ func (s *Settings) Normalize() {
 		s.CategoryFilter = "all"
 	}
 	switch s.SortBy {
-	case "rank", "avg", "p95", "cached", "uncached", "jitter":
+	case "rank", "avg", "p95", "cached", "uncached", "jitter", "doh":
 	default:
 		s.SortBy = "rank"
 	}

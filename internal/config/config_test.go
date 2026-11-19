@@ -62,6 +62,15 @@ func TestSettingsLoadSaveAndNormalize(t *testing.T) {
 	if loaded.Options.Queries != 20 || len(loaded.Options.Protocols) != 3 || loaded.Options.UncachedBase != "cloudflare.com" {
 		t.Fatalf("options mismatch after reload: %+v", loaded.Options)
 	}
+
+	s.SortBy = "doh"
+	if err := SaveSettings(s); err != nil {
+		t.Fatalf("SaveSettings doh sort failed: %v", err)
+	}
+	reloaded, err := LoadSettings()
+	if err != nil || reloaded.SortBy != "doh" {
+		t.Fatalf("expected SortBy=\"doh\" to persist across reload, got %+v (err=%v)", reloaded, err)
+	}
 }
 
 func TestCustomResolversPersistence(t *testing.T) {

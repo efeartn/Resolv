@@ -22,3 +22,12 @@ func TestMacAppBundleRoot(t *testing.T) {
 		}
 	}
 }
+
+func TestIsAppTranslocated(t *testing.T) {
+	if !isAppTranslocated("/private/var/folders/xx/1234/T/AppTranslocation/ABCD-1234/d/Resolv.app/Contents/MacOS/Resolv") {
+		t.Fatal("expected AppTranslocation path to be detected")
+	}
+	if isAppTranslocated("/Applications/Resolv.app/Contents/MacOS/Resolv") {
+		t.Fatal("expected /Applications path not to trigger AppTranslocation")
+	}
+}

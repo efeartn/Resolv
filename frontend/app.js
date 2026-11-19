@@ -6,12 +6,13 @@
 
   // Application UI State
   const state = {
-    version: '1.2.0',
+    version: '1.3.0',
     mode: 'simple',            // 'simple' | 'pro'
     categoryFilter: 'all',     // 'all' | 'Privacy' | 'Ad-blocking' | 'Standard' | 'Family' | 'Custom'
     searchQuery: '',           // free-text filter
-    sortBy: 'rank',            // 'rank' | 'avg' | 'p95' | 'cached' | 'uncached' | 'jitter'
+    sortBy: 'rank',            // 'rank' | 'avg' | 'doh' | 'p95' | 'cached' | 'uncached' | 'jitter'
     running: false,
+    mutating: false,
     expandedIds: new Set(),    // Resolver IDs expanded in Simple Mode
     network: null,
     resolvers: [],
@@ -178,6 +179,8 @@
   const SVG_WARN = '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
   const SVG_COPY = '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   const SVG_CHEVRON = '<svg class="w-3.5 h-3.5 shrink-0 chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+  const SVG_LOCK = '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+  const SVG_SORT = '<svg class="w-2.5 h-2.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
 
   // Latency Tier Styling (<20ms Emerald, 20-60ms Amber, >60ms Rose)
   function latencyBadgeClass(ms, failed = false) {
@@ -334,6 +337,10 @@
     $('hostnameValue').textContent = `${net.hostname || 'localhost'} · ${net.arch || ''}`;
     $('netBackendBadge').textContent = net.backend || net.os;
 
+    const isMac = net.os === 'darwin';
+    if ($('kbdSimpleKey')) $('kbdSimpleKey').textContent = isMac ? '⌥1' : 'Alt+1';
+    if ($('kbdProKey')) $('kbdProKey').textContent = isMac ? '⌥2' : 'Alt+2';
+
     $('elevatedBadge').classList.toggle('hidden', !net.elevated);
 
     const isOffline = net.online === false || navigator.onLine === false;
@@ -472,6 +479,43 @@
     }
   }
 
+  function getSourceList() {
+    if (state.running && Array.isArray(state.liveResults) && state.liveResults.length > 0) {
+      return state.liveResults;
+    }
+    if (state.report && Array.isArray(state.report.results) && state.report.results.length > 0) {
+      return state.report.results;
+    }
+    return null;
+  }
+
+  function getSystemBaselineAvg(sourceResults) {
+    if (!Array.isArray(sourceResults)) return 0;
+    const sys = sourceResults.find((r) => r.resolver && r.resolver.source === 'system' && r.status !== 'failed' && r.status !== 'skipped' && r.overall && r.overall.received > 0);
+    return sys ? sys.overall.avgMs : 0;
+  }
+
+  function speedDeltaBadgeHTML(item, sysAvg) {
+    if (!sysAvg || sysAvg <= 0 || !item || !item.resolver || item.resolver.source === 'system') return '';
+    if (item.status === 'pending' || item.status === 'skipped' || item.status === 'failed' || !item.overall || item.overall.received === 0) return '';
+    const pct = Math.round(((sysAvg - item.overall.avgMs) / sysAvg) * 100);
+    if (pct >= 2) {
+      return `<span class="delta-pill delta-faster font-mono" title="${pct}% faster than Current System DNS (${sysAvg.toFixed(1)} ms)">-${pct}%</span>`;
+    }
+    if (pct <= -5) {
+      const slower = Math.abs(pct);
+      return `<span class="delta-pill delta-slower font-mono" title="${slower}% slower than Current System DNS (${sysAvg.toFixed(1)} ms)">+${slower}%</span>`;
+    }
+    return '';
+  }
+
+  function dohSpeedBadgeHTML(item) {
+    const doh = item && item.protocols && item.protocols.doh;
+    if (!doh || !doh.combined || doh.combined.received === 0) return '';
+    const p95 = (doh.combined.p95Ms || doh.combined.maxMs || doh.combined.avgMs).toFixed(1);
+    return `<span class="badge-doh font-mono font-semibold" title="Encrypted DNS-over-HTTPS (DoH) avg latency · P95 ${p95} ms">${SVG_LOCK}<span>DoH ${doh.combined.avgMs.toFixed(1)} ms</span></span>`;
+  }
+
   // Build unified items list (streaming partial results, finished report, or pre-benchmark resolver list)
   function getDisplayItems() {
     const cat = state.categoryFilter;
@@ -482,9 +526,7 @@
       return hay.includes(q);
     };
 
-    const sourceResults = (state.running && Array.isArray(state.liveResults) && state.liveResults.length > 0)
-      ? state.liveResults
-      : (state.report && Array.isArray(state.report.results) && state.report.results.length > 0 ? state.report.results : null);
+    const sourceResults = getSourceList();
 
     if (sourceResults) {
       const filtered = sourceResults.filter((r) => (cat === 'all' || r.resolver.category === cat) && matchesSearch(r.resolver));
@@ -495,6 +537,10 @@
         if (!item.overall || item.overall.received === 0) return 999997;
         switch (state.sortBy) {
           case 'avg': return item.overall.avgMs;
+          case 'doh': {
+            const doh = item.protocols && item.protocols.doh && item.protocols.doh.combined;
+            return doh && doh.received > 0 ? doh.avgMs : 999996;
+          }
           case 'p95': return item.overall.p95Ms || item.overall.maxMs;
           case 'cached': return item.cached && item.cached.received > 0 ? item.cached.avgMs : 999996;
           case 'uncached': return item.uncached && item.uncached.received > 0 ? item.uncached.avgMs : 999996;
@@ -523,6 +569,23 @@
 
   function renderTablesOnly() {
     const items = getDisplayItems();
+    const sourceList = getSourceList();
+    const totalAvailable = sourceList ? sourceList.length : state.resolvers.length;
+    const isFiltered = state.categoryFilter !== 'all' || (state.searchQuery || '').trim() !== '';
+    const countBadge = $('filterCountBadge');
+    if (countBadge) {
+      if (isFiltered) {
+        countBadge.textContent = `Showing ${items.length} / ${totalAvailable}`;
+        countBadge.classList.remove('hidden');
+      } else {
+        countBadge.classList.add('hidden');
+      }
+    }
+    if ($('clearSearchBtn')) {
+      $('clearSearchBtn').classList.toggle('hidden', (state.searchQuery || '').length === 0);
+    }
+
+    const sysAvg = getSystemBaselineAvg(sourceList);
     let maxCeiling = 80;
     for (let i = 0; i < items.length; i++) {
       const o = items[i].overall;
@@ -530,9 +593,9 @@
     }
     // Render only the visible view to eliminate hidden DOM rebuilds during live updates.
     if (state.mode === 'pro') {
-      renderProTable(items, maxCeiling);
+      renderProTable(items, maxCeiling, sysAvg);
     } else {
-      renderSimpleList(items, maxCeiling);
+      renderSimpleList(items, maxCeiling, sysAvg);
     }
   }
 
@@ -541,10 +604,10 @@
     renderTablesOnly();
   }
 
-  function renderSimpleList(items, maxCeiling) {
+  function renderSimpleList(items, maxCeiling, sysAvg) {
     const container = $('simpleListContainer');
     if (items.length === 0) {
-      container.innerHTML = `<div class="panel p-8 text-center text-xs text-secondary">No resolvers match the selected category filter.</div>`;
+      container.innerHTML = `<div class="panel p-8 text-center text-xs text-secondary">No resolvers match the selected filter or search query.</div>`;
       return;
     }
 
@@ -561,11 +624,13 @@
         : (r.doh || r.dot || '—');
       const canApply = Array.isArray(r.ipv4) && r.ipv4.length > 0 && !r.deprecated;
       const rankLabel = isSkipped ? '—' : isPending ? '·' : String(item.rank).padStart(2, '0');
+      const dohPill = (!isPending && !isFailed && !isSkipped) ? dohSpeedBadgeHTML(item) : '';
+      const deltaPill = speedDeltaBadgeHTML(item, sysAvg);
 
       return `
       <div class="resolver-card ${isTopWinner ? 'is-winner' : ''} ${expanded ? 'is-expanded' : ''} ${isSkipped ? 'opacity-65' : ''}">
         <div class="px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 cursor-pointer" data-toggle-row="${escapeHTML(r.id)}">
-          <div class="flex items-center gap-3 min-w-0 md:w-[36%]">
+          <div class="flex items-center gap-3 min-w-0 md:w-[34%]">
             <div class="row-rank font-mono ${isTopWinner ? 'is-first' : ''}">
               ${rankLabel}
             </div>
@@ -590,14 +655,16 @@
             }
           </div>
 
-          <div class="flex items-center justify-end gap-2 shrink-0" onclick="event.stopPropagation()">
+          <div class="flex flex-wrap items-center justify-end gap-1.5 shrink-0" data-no-toggle="1">
+            ${dohPill}
+            ${deltaPill}
             ${isSkipped
               ? `<span class="badge-pill badge-neutral font-mono" title="No endpoint matches selected transport protocols">Skipped</span>`
               : isPending
                 ? `<span class="badge-pill badge-neutral font-mono">${state.running ? 'Testing…' : 'Ready'}</span>`
                 : isFailed
                   ? `<span class="badge-pill badge-rose font-mono">Unreachable</span>`
-                  : `<span class="badge-latency ${latencyBadgeClass(avg)} font-mono font-semibold" title="P95: ${(item.overall.p95Ms || avg).toFixed(1)} ms">${avg.toFixed(1)} ms</span>`
+                  : `<span class="badge-latency ${latencyBadgeClass(avg)} font-mono font-semibold" title="Primary avg · P95 ${(item.overall.p95Ms || avg).toFixed(1)} ms">${avg.toFixed(1)} ms</span>`
             }
 
             ${canApply
@@ -642,13 +709,14 @@
         </div>`;
       }
       const ok = pr.combined && pr.combined.received > 0;
-      return `<div class="proto-tile p-2.5">
+      const isDohHighlight = p === 'doh' && ok;
+      return `<div class="proto-tile ${isDohHighlight ? 'proto-tile-doh' : ''} p-2.5">
         <div class="flex items-center justify-between">
-          <span class="font-mono text-micro uppercase text-secondary">${label}</span>
+          <span class="font-mono text-micro uppercase ${isDohHighlight ? 'text-cyan' : 'text-secondary'}">${label}</span>
           <span class="font-mono text-[10px] text-muted truncate max-w-[150px]" title="${escapeHTML(pr.endpoint)}">${escapeHTML(pr.endpoint || '')}</span>
         </div>
         <div class="mt-1 flex items-center justify-between gap-2">
-          <span class="font-mono text-sm font-semibold ${ok ? 'text-primary' : 'text-rose-soft'}">
+          <span class="font-mono text-sm font-semibold ${ok ? (isDohHighlight ? 'text-cyan' : 'text-primary') : 'text-rose-soft'}">
             ${ok ? `${pr.combined.avgMs.toFixed(2)} ms` : escapeHTML(pr.error || 'Failed')}
           </span>
           ${ok && pr.combined.samples ? renderSparklineSVG(pr.combined.samples, pr.combined.avgMs, 76, 18) : ''}
@@ -753,23 +821,30 @@
     return ['udp', 'doh', 'dot', 'tcp'].filter((p) => present.has(p));
   }
 
-  function renderProTable(items, maxCeiling) {
+  function renderProTable(items, maxCeiling, sysAvg) {
     const tbody = $('proTableBody');
     const headRow = $('proTableHeadRow');
     const activeProtos = detectProTableProtocols(items);
     const protoTitles = { udp: 'UDP :53', doh: 'DoH', dot: 'DoT :853', tcp: 'TCP :53' };
+    const sortTh = (label, colKey, alignRight = true, extraClass = '') => {
+      const sorted = state.sortBy === colKey;
+      const alignCls = alignRight ? 'text-right' : '';
+      return `<th class="py-3 px-2.5 ${alignCls} th-sortable ${extraClass} ${sorted ? 'is-sorted' : ''}" data-sort-col="${colKey}" title="Sort by ${escapeHTML(label)}"><span class="inline-flex items-center gap-1">${label}${sorted ? SVG_SORT : ''}</span></th>`;
+    };
     if (headRow) {
       headRow.innerHTML = `
-        <th class="py-3 px-3">#</th>
+        ${sortTh('#', 'rank', false)}
         <th class="py-3 px-3">Resolver</th>
-        <th class="py-3 px-2.5 text-right">Avg (ms)</th>
-        <th class="py-3 px-2.5 text-right">P95</th>
+        ${sortTh('Avg (ms)', 'avg', true)}
+        ${sortTh('P95', 'p95', true)}
         <th class="py-3 px-3">Latency Range (Min–Avg–P95–Max)</th>
-        <th class="py-3 px-2.5 text-right">Cached</th>
-        <th class="py-3 px-2.5 text-right">Uncached</th>
-        <th class="py-3 px-2.5 text-right">Jitter (σ)</th>
+        ${sortTh('Cached', 'cached', true)}
+        ${sortTh('Uncached', 'uncached', true)}
+        ${sortTh('Jitter (σ)', 'jitter', true)}
         <th class="py-3 px-2.5 text-right">Loss</th>
-        ${activeProtos.map((p) => `<th class="py-3 px-2.5 text-right">${protoTitles[p] || p.toUpperCase()}</th>`).join('')}
+        ${activeProtos.map((p) => p === 'doh'
+          ? sortTh(`${SVG_LOCK}<span>DoH</span>`, 'doh', true, 'pro-th-doh')
+          : `<th class="py-3 px-2.5 text-right">${protoTitles[p] || p.toUpperCase()}</th>`).join('')}
         <th class="py-3 px-2.5">DNSSEC</th>
         <th class="py-3 px-2.5">AdBlock</th>
         <th class="py-3 px-2.5">Integrity</th>
@@ -779,7 +854,7 @@
 
     const colSpan = 13 + activeProtos.length;
     if (items.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="${colSpan}" class="py-8 text-center text-secondary">No resolvers match the selected filter.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${colSpan}" class="py-8 text-center text-secondary">No resolvers match the selected filter or search query.</td></tr>`;
       return;
     }
 
@@ -787,6 +862,9 @@
       const pr = item.protocols && item.protocols[p];
       if (!pr || !pr.combined || pr.combined.sent === 0) return '<span class="text-muted">—</span>';
       if (pr.combined.received === 0) return `<span class="text-rose">${escapeHTML(pr.error || 'err')}</span>`;
+      if (p === 'doh') {
+        return `<span class="badge-doh-cell font-semibold">${SVG_LOCK}<span>${pr.combined.avgMs.toFixed(1)} ms</span></span>`;
+      }
       return `${pr.combined.avgMs.toFixed(1)} ms`;
     };
 
@@ -798,10 +876,11 @@
       const isPending = item.status === 'pending' || (!isSkipped && !isFailed && (!o || o.received === 0));
       const canApply = Array.isArray(r.ipv4) && r.ipv4.length > 0 && !r.deprecated;
       const primaryAddr = (r.ipv4 && r.ipv4[0]) || r.doh || r.dot || '—';
+      const deltaBadge = speedDeltaBadgeHTML(item, sysAvg);
 
       return `
       <tr class="pro-row ${isSkipped ? 'opacity-65' : ''}">
-        <td class="py-3 px-3 font-mono text-secondary">${isSkipped ? '—' : isPending ? '·' : String(item.rank).padStart(2, '0')}</td>
+        <td class="py-3 px-2.5 font-mono text-secondary">${isSkipped ? '—' : isPending ? '·' : String(item.rank).padStart(2, '0')}</td>
         <td class="py-3 px-3">
           <div class="flex items-center gap-1.5">
             <span class="font-semibold text-primary">${escapeHTML(r.name)}</span>
@@ -810,7 +889,7 @@
           <div class="font-mono text-[11px] text-secondary truncate max-w-[190px]">${escapeHTML(primaryAddr)}</div>
         </td>
         <td class="py-3 px-2.5 text-right font-mono">
-          ${isSkipped ? '<span class="badge-pill badge-neutral">Skipped</span>' : isPending ? `<span class="text-muted">${state.running ? '…' : '—'}</span>` : isFailed ? '<span class="badge-pill badge-rose">Failed</span>' : `<span class="badge-latency ${latencyBadgeClass(o.avgMs)} font-semibold">${o.avgMs.toFixed(2)}</span>`}
+          ${isSkipped ? '<span class="badge-pill badge-neutral">Skipped</span>' : isPending ? `<span class="text-muted">${state.running ? '…' : '—'}</span>` : isFailed ? '<span class="badge-pill badge-rose">Failed</span>' : `<div class="inline-flex items-center justify-end gap-1">${deltaBadge}<span class="badge-latency ${latencyBadgeClass(o.avgMs)} font-semibold">${o.avgMs.toFixed(2)}</span></div>`}
         </td>
         <td class="py-3 px-2.5 text-right font-mono text-primary">
           ${!isPending && !isFailed && !isSkipped ? `${(o.p95Ms || o.maxMs).toFixed(1)}` : '—'}
@@ -951,7 +1030,14 @@
   }
 
   // Apply Resolver or Show Copy Fallback Modal
-  async function applyResolverById(resolverId) {
+  async function applyResolverById(resolverId, triggerBtn = null) {
+    if (state.mutating) return;
+    state.mutating = true;
+    const origLabel = triggerBtn ? triggerBtn.textContent : '';
+    if (triggerBtn) {
+      triggerBtn.disabled = true;
+      triggerBtn.textContent = 'Applying…';
+    }
     try {
       const res = await backend.ApplyResolver(resolverId);
       if (res.network) {
@@ -973,6 +1059,12 @@
       }
     } catch (err) {
       showToast(`Error applying DNS: ${err.message || err}`, 'error');
+    } finally {
+      state.mutating = false;
+      if (triggerBtn) {
+        triggerBtn.disabled = false;
+        triggerBtn.textContent = origLabel || 'Apply';
+      }
     }
   }
 
@@ -1003,13 +1095,25 @@
   function buildQuickCommand(addrs, ifaceName) {
     if (!addrs || addrs.length === 0) return '# Encrypted DoH/DoT endpoint only';
     const os = (state.network && state.network.os) || 'windows';
+    const active = state.network && state.network.active;
     if (os === 'darwin') {
-      return `sudo networksetup -setdnsservers "${ifaceName}" ${addrs.join(' ')} && sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder`;
+      const svc = (active && active.id) || ifaceName;
+      return `sudo networksetup -setdnsservers "${svc}" ${addrs.join(' ')} && sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder`;
     }
     if (os === 'linux') {
-      return `nmcli connection modify "${ifaceName}" ipv4.dns "${addrs.filter((a) => !a.includes(':')).join(' ')}" ipv4.ignore-auto-dns yes && resolvectl flush-caches`;
+      const v4 = addrs.filter((a) => !a.includes(':'));
+      const v6 = addrs.filter((a) => a.includes(':'));
+      const conn = active && active.connection;
+      const dev = (active && active.device) || ifaceName;
+      if ((state.network && state.network.backend === 'resolvectl') || !conn) {
+        return `sudo resolvectl dns ${dev} ${addrs.join(' ')} && sudo resolvectl domain ${dev} '~.' && sudo resolvectl flush-caches`;
+      }
+      const parts = [`nmcli connection modify "${conn}"`];
+      if (v4.length > 0) parts.push(`ipv4.dns "${v4.join(' ')}" ipv4.ignore-auto-dns yes`);
+      if (v6.length > 0) parts.push(`ipv6.dns "${v6.join(' ')}" ipv6.ignore-auto-dns yes`);
+      return `${parts.join(' ')} && nmcli connection up "${conn}" && resolvectl flush-caches`;
     }
-    const idx = (state.network && state.network.active && state.network.active.id) || '1';
+    const idx = (active && active.id) || '1';
     return `Set-DnsClientServerAddress -InterfaceIndex ${idx} -ServerAddresses @(${addrs.map((a) => `'${a}'`).join(',')}); ipconfig /flushdns`;
   }
 
@@ -1053,14 +1157,14 @@
     el.textContent = `${protoLabel} · ${q}q/domain · ${probes}`;
   }
 
-  function setMode(mode, persist = true) {
+  function setMode(mode, persist = true, skipRender = false) {
     state.mode = mode === 'pro' ? 'pro' : 'simple';
     $('modeSimpleBtn').classList.toggle('active', state.mode === 'simple');
     $('modeProBtn').classList.toggle('active', state.mode === 'pro');
     $('simpleViewSection').classList.toggle('hidden', state.mode !== 'simple');
     $('proViewSection').classList.toggle('hidden', state.mode !== 'pro');
     $('proConfigBar').classList.toggle('hidden', state.mode !== 'pro');
-    renderTablesOnly();
+    if (!skipRender) renderTablesOnly();
     if (persist) persistUiPreferences();
   }
 
@@ -1129,7 +1233,7 @@
 
   function renderUpdateModal(errorMsg = '') {
     const info = state.updateInfo;
-    $('updateCurrentVer').textContent = `v${state.version || '1.2.0'}`;
+    $('updateCurrentVer').textContent = `v${state.version || '1.3.0'}`;
     $('updateLatestVer').textContent = info && info.version ? `v${info.version}` : '—';
 
     const badge = $('updateModalBadge');
@@ -1396,20 +1500,35 @@
     $('modeProBtn').addEventListener('click', () => setMode('pro'));
 
     if ($('searchResolverInput')) {
+      let searchTimer = null;
       $('searchResolverInput').addEventListener('input', (e) => {
         state.searchQuery = e.target.value;
-        renderResults();
+        if ($('clearSearchBtn')) {
+          $('clearSearchBtn').classList.toggle('hidden', state.searchQuery.length === 0);
+        }
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => renderTablesOnly(), 75);
+      });
+    }
+    if ($('clearSearchBtn')) {
+      $('clearSearchBtn').addEventListener('click', () => {
+        if ($('searchResolverInput')) {
+          $('searchResolverInput').value = '';
+          $('searchResolverInput').focus();
+        }
+        state.searchQuery = '';
+        renderTablesOnly();
       });
     }
     if ($('sortSelect')) {
       $('sortSelect').addEventListener('change', (e) => {
         state.sortBy = e.target.value;
         persistUiPreferences();
-        renderResults();
+        renderTablesOnly();
       });
     }
 
-    // Keyboard shortcuts (Linear / Raycast style)
+    // Keyboard shortcuts (handles macOS Option+1 / Option+2 via e.code as well)
     window.addEventListener('keydown', (e) => {
       const tag = (e.target && e.target.tagName) || '';
       const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
@@ -1423,16 +1542,18 @@
           e.target.value = '';
           state.searchQuery = '';
           e.target.blur();
-          renderResults();
+          renderTablesOnly();
         }
         return;
       }
       if (!inInput && (e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k'))) {
         e.preventDefault();
         if ($('searchResolverInput')) $('searchResolverInput').focus();
-      } else if (!inInput && e.altKey && e.key === '1') {
+      } else if (!inInput && e.altKey && (e.code === 'Digit1' || e.key === '1')) {
+        e.preventDefault();
         setMode('simple');
-      } else if (!inInput && e.altKey && e.key === '2') {
+      } else if (!inInput && e.altKey && (e.code === 'Digit2' || e.key === '2')) {
+        e.preventDefault();
         setMode('pro');
       }
     });
@@ -1469,31 +1590,55 @@
     $('verifyDnsBtn').addEventListener('click', () => verifyCurrentDNS());
 
     $('resetDnsBtn').addEventListener('click', async () => {
-      const res = await backend.ResetDNS();
-      if (res.network) {
-        state.network = res.network;
-        renderNetwork();
-      }
-      if (res.success) {
-        showToast(res.message, 'success');
-        if (state.report && state.report.recommendation && state.report.recommendation.currentIsFastest) {
-          state.report.recommendation.currentIsFastest = false;
-          renderBanners();
+      if (state.mutating) return;
+      state.mutating = true;
+      const btn = $('resetDnsBtn');
+      const orig = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Resetting…';
+      try {
+        const res = await backend.ResetDNS();
+        if (res.network) {
+          state.network = res.network;
+          renderNetwork();
         }
-        verifyCurrentDNS({ prefixMessage: res.message });
-      } else {
-        showToast(res.message, 'error');
+        if (res.success) {
+          showToast(res.message, 'success');
+          if (state.report && state.report.recommendation && state.report.recommendation.currentIsFastest) {
+            state.report.recommendation.currentIsFastest = false;
+            renderBanners();
+          }
+          verifyCurrentDNS({ prefixMessage: res.message });
+        } else {
+          showToast(res.message, 'error');
+        }
+      } finally {
+        state.mutating = false;
+        btn.disabled = false;
+        btn.textContent = orig;
       }
     });
 
     $('flushCacheBtn').addEventListener('click', async () => {
-      const res = await backend.FlushCache();
-      showToast(res.message, res.success ? 'success' : 'error');
+      if (state.mutating) return;
+      state.mutating = true;
+      const btn = $('flushCacheBtn');
+      const orig = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Flushing…';
+      try {
+        const res = await backend.FlushCache();
+        showToast(res.message, res.success ? 'success' : 'error');
+      } finally {
+        state.mutating = false;
+        btn.disabled = false;
+        btn.textContent = orig;
+      }
     });
 
     $('winnerApplyBtn').addEventListener('click', (e) => {
       const id = e.currentTarget.dataset.resolverId;
-      if (id) applyResolverById(id);
+      if (id) applyResolverById(id, e.currentTarget);
     });
 
     $('winnerCopyBtn').addEventListener('click', (e) => {
@@ -1515,6 +1660,14 @@
       if (!e.target.closest('#exportMenuBtn') && !e.target.closest('#exportDropdown')) {
         $('exportDropdown').classList.add('hidden');
       }
+      const sortCol = e.target.closest('[data-sort-col]');
+      if (sortCol) {
+        state.sortBy = sortCol.dataset.sortCol;
+        if ($('sortSelect')) $('sortSelect').value = state.sortBy;
+        persistUiPreferences();
+        renderTablesOnly();
+        return;
+      }
       const copyValBtn = e.target.closest('[data-copy-value]');
       if (copyValBtn) {
         const val = copyValBtn.dataset.copyValue;
@@ -1524,7 +1677,7 @@
       }
       const applyBtn = e.target.closest('[data-apply-resolver]');
       if (applyBtn) {
-        applyResolverById(applyBtn.dataset.applyResolver);
+        applyResolverById(applyBtn.dataset.applyResolver, applyBtn);
         return;
       }
       const copyBtn = e.target.closest('[data-copy-resolver]');
@@ -1546,10 +1699,11 @@
       }
       const toggleRow = e.target.closest('[data-toggle-row]');
       if (toggleRow) {
+        if (toggleRow.tagName !== 'BUTTON' && e.target.closest('button, a, input, select, [data-no-toggle]')) return;
         const id = toggleRow.dataset.toggleRow;
         if (state.expandedIds.has(id)) state.expandedIds.delete(id);
         else state.expandedIds.add(id);
-        renderResults();
+        renderTablesOnly();
       }
     });
 
@@ -1685,8 +1839,9 @@
 
   function applyBootstrap(b) {
     if (!b) return;
-    state.version = b.version || '1.2.0';
+    state.version = b.version || '1.3.0';
     state.configDir = b.configDir || '';
+    state.report = b.lastReport || null;
     $('appVersionBadge').textContent = `v${state.version}`;
     if (b.network) {
       state.network = b.network;
@@ -1699,7 +1854,7 @@
     }
     if (b.settings) {
       state.settings = b.settings;
-      if (b.settings.viewMode) setMode(b.settings.viewMode, false);
+      if (b.settings.viewMode) setMode(b.settings.viewMode, false, true);
       if (b.settings.categoryFilter) applyCategoryFilterUI(b.settings.categoryFilter);
       if (b.settings.sortBy && $('sortSelect')) {
         state.sortBy = b.settings.sortBy;
@@ -1710,7 +1865,6 @@
         syncOptionsToProBar(b.settings.options);
       }
     }
-    state.report = b.lastReport || null;
 
     renderNetwork();
     renderResults();
@@ -1828,8 +1982,8 @@
     };
 
     return {
-      getBootstrap: () => ({ version: '1.2.0', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
-      selectInterface: () => ({ version: '1.2.0', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
+      getBootstrap: () => ({ version: '1.3.0', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
+      selectInterface: () => ({ version: '1.3.0', configDir: '~/.config/Resolv (Preview)', network: demoNet, resolvers, settings: demoSettings, defaultOptions: demoSettings.options }),
       addCustomResolver(name, input) {
         if (!input) throw new Error('Enter an IPv4/IPv6 address or DoH URL');
         resolvers = [...resolvers, { id: 'custom-' + Date.now(), name: name || input, category: 'Custom', source: 'custom', ipv4: [input] }];
@@ -1857,10 +2011,10 @@
         message: `Verified ${demoNet.systemDns.join(', ')}: 11.4 ms avg (cached 7.8 ms · uncached 15.0 ms · 0% loss)`
       }),
       checkForUpdates: () => ({
-        currentVersion: '1.2.0',
-        version: '1.2.0',
-        tagName: 'v1.2.0',
-        title: 'Resolv v1.2.0',
+        currentVersion: '1.3.0',
+        version: '1.3.0',
+        tagName: 'v1.3.0',
+        title: 'Resolv v1.3.0',
         body: '- Auto-updater with SHA-256 verification\n- Live streaming benchmark results\n- Persistent settings and benchmark history',
         htmlUrl: 'https://github.com/efeartn/Resolv/releases',
         isAvailable: false,
@@ -1897,7 +2051,7 @@
           topResults: results.slice(0, 5).map((r) => ({ name: r.resolver.name, category: r.resolver.category, avgMs: r.overall.avgMs, p95Ms: r.overall.p95Ms, jitterMs: r.overall.jitterMs, lossPct: r.overall.lossPct }))
         });
         return {
-          version: '1.2.0',
+          version: '1.3.0',
           durationMs: 1420,
           options: opts,
           results,

@@ -161,7 +161,7 @@ func TestNormalizeAndSkippedAndLiveProgress(t *testing.T) {
 
 	// UDP-only run on a DoH-only resolver should mark status="skipped", not "failed".
 	dohOnly := Resolver{ID: "dohonly", Name: "DoH Only", Category: CategoryPrivacy, Source: SourceBuiltin, DoH: "https://example.com/dns-query"}
-	rep := Run(context.Background(), []Resolver{dohOnly}, Options{Protocols: []string{"udp"}, Queries: 1, CheckIntegrity: false}, "1.2.0", nil)
+	rep := Run(context.Background(), []Resolver{dohOnly}, Options{Protocols: []string{"udp"}, Queries: 1, CheckIntegrity: false}, "1.3.0", nil)
 	if len(rep.Results) != 1 || rep.Results[0].Status != "skipped" {
 		t.Fatalf("expected skipped status for DoH-only resolver in UDP mode, got %+v", rep.Results)
 	}
@@ -214,7 +214,7 @@ func TestNormalizeAndSkippedAndLiveProgress(t *testing.T) {
 		StaggerMs:      0,
 		TimeoutMs:      1000,
 		CheckIntegrity: false,
-	}, "1.2.0", func(p Progress) {
+	}, "1.3.0", func(p Progress) {
 		if len(p.Partial) > 0 {
 			partialCount++
 		}
@@ -378,5 +378,23 @@ func TestUDPQuerierReusesClientAndCheckIntegrityReusesWarmQuerier(t *testing.T) 
 	}
 	if msg.Id != origID || resp.Id != origID {
 		t.Fatalf("expected original query ID preserved (%d), msg=%d resp=%d", origID, msg.Id, resp.Id)
+	}
+
+	dotRep := &Report{
+		Version: "1.3.0",
+		Options: Options{Protocols: []string{"udp", "doh", "dot"}, Queries: 5, TimeoutMs: 2000},
+		Results: []*ServerResult{{
+			Resolver: Builtin()[0],
+			Rank:     1,
+			Status:   "ok",
+			Overall:  Stats{Avg: 12.5, P95: 18.0},
+			Protocols: map[Protocol]*ProtocolResult{
+				ProtoDoT: {Protocol: ProtoDoT, Combined: Stats{Sent: 5, Received: 5, Avg: 19.4}},
+			},
+		}},
+	}
+	md, err := Export(dotRep, "md")
+	if err != nil || !strings.Contains(md, "| DoT |") || !strings.Contains(md, "19.40") {
+		t.Fatalf("expected Markdown export to include DoT column when ProtoDoT tested, got err=%v md:\n%s", err, md)
 	}
 }

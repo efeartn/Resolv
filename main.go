@@ -42,6 +42,7 @@ func webviewUserDataDir() string {
 }
 
 func main() {
+	initPlatform()
 	// Keep Go backend memory compact on low-RAM machines without throttling active DNS bursts.
 	debug.SetMemoryLimit(64 << 20)
 
